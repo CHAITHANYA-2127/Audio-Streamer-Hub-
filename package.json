@@ -1,0 +1,20 @@
+{
+  "name": "audio-streamer-hub",
+  "version": "1.0.0",
+  "description": "Audio Streamer Hub - Spotify-like music player with offline downloads, favorites, equalizer, and real-time search",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "music-player",
+    "audio-streamer",
+    "spotify-clone",
+    "telugu-songs",
+    "offline-music",
+    "equalizer",
+    "indexeddb"
+  ],
+  "author": "Audio Streamer Hub",
+  "license": "MIT"
+}

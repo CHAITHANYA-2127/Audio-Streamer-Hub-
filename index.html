@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Audio Streamer Hub - a modern browser-based music player with instant streaming, downloads, favorites, and live visualizer.">
+  <title>Audio Streamer Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <a class="brand" href="#" id="brandLogo">
+      <span class="brand-icon">♫</span>
+      <span>Audio <b>Streamer Hub</b></span>
+    </a>
+
+    <div class="top-actions">
+      <!-- Online / Offline Mode Toggle Button -->
+      <button id="modeBtn" class="mode-toggle-btn online" title="Toggle Online / Offline Mode">
+        <span class="mode-dot"></span>
+        <span id="modeText">Online</span>
+      </button>
+
+      <!-- Local File Upload Button -->
+      <button id="uploadBtn" class="secondary-btn" title="Add local audio from computer">
+        <span>＋ Local Audio</span>
+      </button>
+      <input id="fileInput" type="file" accept="audio/*" multiple hidden>
+
+      <!-- Audio Settings / Equalizer Modal Trigger -->
+      <button id="settingsBtn" class="icon-btn" title="Audio Settings & Equalizer">🎚</button>
+
+      <!-- Header Quick Log In Button -->
+      <button id="headerLoginBtn" class="primary-btn header-login-pill" title="Log In / Sign Up">
+        <span>🔑</span>
+        <span>Log In</span>
+      </button>
+
+      <!-- User Profile / Auth Button & Dropdown -->
+      <div class="user-menu-wrap">
+        <button id="userBtn" class="user-btn">
+          <span id="userAvatar" class="user-avatar-tag">🎧</span>
+          <span id="userName">Sign In</span>
+          <small>▾</small>
+        </button>
+        <div id="userDropdown" class="user-dropdown hidden">
+          <div class="user-dropdown-header">
+            <strong id="dropdownUsername">Guest Listener</strong>
+            <small id="dropdownEmail">Not signed in</small>
+          </div>
+          <hr class="dropdown-hr">
+          <button id="menuLoginBtn" class="dropdown-link">🔑 Log In / Sign Up</button>
+          <button id="menuSettingsBtn" class="dropdown-link">⚙ Audio Settings</button>
+          <button id="menuOfflineBtn" class="dropdown-link">📴 Offline Mode</button>
+          <hr class="dropdown-hr">
+          <button id="menuLogoutBtn" class="dropdown-link danger">🚪 Log Out</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- OFFLINE ALERT BANNER -->
+  <div id="offlineBanner" class="offline-banner hidden">
+    <span>📴 You are currently in <strong>Offline Mode</strong>. Playing downloaded songs stored locally in your Library.</span>
+    <button id="bannerGoOnlineBtn" class="banner-switch-btn">Go Online</button>
+  </div>
+
+  <!-- MAIN LAYOUT -->
+  <main class="layout">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <nav>
+        <button class="nav-item active" data-view="home">
+          <span>⌂</span>
+          <span>Home</span>
+        </button>
+        <button class="nav-item" data-view="library">
+          <span>▣</span>
+          <span>My Library</span>
+          <span id="libraryCountBadge" class="nav-badge">0</span>
+        </button>
+        <button class="nav-item" data-view="favorites">
+          <span>♥</span>
+          <span>Favorites</span>
+          <span id="favCountBadge" class="nav-badge">0</span>
+        </button>
+        <button class="nav-item" data-view="downloads">
+          <span>⬇</span>
+          <span>Downloaded</span>
+          <span id="dlCountBadge" class="nav-badge">0</span>
+        </button>
+      </nav>
+
+      <div class="side-card">
+        <h3>Featured Genres</h3>
+        <p>Instant curated playlists and chartbusters.</p>
+        <div class="playlist-chips">
+          <button class="playlist-chip" data-genre="all">🔥 All Popular Hits</button>
+          <button class="playlist-chip" data-genre="telugu">🎵 Telugu Chartbusters</button>
+          <button class="playlist-chip" data-genre="bollywood">✨ Bollywood Melodies</button>
+          <button class="playlist-chip" data-genre="global">🌍 Global Top 50</button>
+          <button class="playlist-chip" data-genre="chill">☕ Lo-Fi & Beats</button>
+        </div>
+      </div>
+
+      <!-- User Playlists Section in Sidebar -->
+      <div class="side-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <h3 style="margin:0;">Playlists</h3>
+          <button id="sidebarNewPlBtn" class="text-btn" style="font-weight:700;">＋ New</button>
+        </div>
+        <div id="sidebarPlaylists" class="playlist-chips"></div>
+      </div>
+
+      <!-- Offline Storage Indicator Box -->
+      <div class="side-storage-box">
+        <div class="storage-header">
+          <span>Offline Database</span>
+          <strong id="storageSizePill">0.0 MB</strong>
+        </div>
+        <div class="storage-progress">
+          <div id="storageFillBar" class="storage-fill" style="width: 5%;"></div>
+        </div>
+        <p style="font-size:11px; color:var(--muted); margin:6px 0 0;">Downloads are saved as audio Blobs in IndexedDB for 100% offline playback.</p>
+      </div>
+
+      <p class="side-note">Stream millions of tracks instantly with real-time live search.</p>
+    </aside>
+
+    <!-- CONTENT -->
+    <section class="content">
+
+      <!-- 1. HOME VIEW -->
+      <div id="homeView" class="view">
+        <section class="hero">
+          <div>
+            <p class="eyebrow">YOUR PERSONAL AUDIO SPACE</p>
+            <h1>Stream. Discover. <span>Enjoy.</span></h1>
+            <p class="hero-copy">Instant streaming audio player with preloaded Telugu hits, real-time online song search, favorites, offline download, and a live visualizer.</p>
+            <div class="hero-btn-row">
+              <button id="heroPlayBtn" class="primary-btn">▶ Play Trending Songs</button>
+              <button id="heroDlAlbumBtn" class="secondary-btn">⬇ Download Album</button>
+            </div>
+          </div>
+          <div class="hero-disc">
+            <div class="disc-center">♫</div>
+          </div>
+        </section>
+
+        <!-- Search Bar Section -->
+        <section class="section-head">
+          <div>
+            <h2 id="gridHeading">Trending & Available Songs</h2>
+            <p id="recentCount">Curated Telugu chartbusters, Bollywood & Global pop</p>
+          </div>
+          <div class="search-wrapper">
+            <input id="searchInput" class="search" type="search" placeholder="Search any song, artist, Telugu hit..." autocomplete="off">
+            <button id="searchClearBtn" class="search-clear hidden" title="Clear">✕</button>
+            <div id="searchSpinner" class="search-spinner"></div>
+          </div>
+        </section>
+
+        <!-- Quick Search Tags -->
+        <div class="search-chips-row">
+          <button class="search-chip" data-search="Devara">🔥 Devara</button>
+          <button class="search-chip" data-search="Anirudh Ravichander">⚡ Anirudh</button>
+          <button class="search-chip" data-search="Pushpa 2">🪓 Pushpa 2</button>
+          <button class="search-chip" data-search="Sid Sriram">🎤 Sid Sriram</button>
+          <button class="search-chip" data-search="Arijit Singh">💫 Arijit Singh</button>
+          <button class="search-chip" data-search="RRR Telugu">🐅 RRR</button>
+          <button class="search-chip" data-search="The Weeknd">🌙 The Weeknd</button>
+        </div>
+
+        <!-- Songs Grid -->
+        <div id="trackGrid" class="track-grid"></div>
+
+        <!-- Queue Section -->
+        <section class="section-head playlist-head">
+          <div>
+            <h2>Current Queue</h2>
+            <p id="queueCount">Up next</p>
+          </div>
+          <button id="clearBtn" class="text-btn">Reset queue</button>
+        </section>
+        <div id="playlist" class="playlist"></div>
+      </div>
+
+      <!-- 2. MY LIBRARY VIEW -->
+      <div id="libraryView" class="view hidden">
+        <div class="page-title">
+          <p class="eyebrow">COLLECTION</p>
+          <h1>My Library</h1>
+        </div>
+
+        <div class="page-action-row">
+          <div class="library-tabs">
+            <button class="lib-tab active" data-tab="all">All Items</button>
+            <button class="lib-tab" data-tab="downloads">⬇ Downloaded (Offline)</button>
+            <button class="lib-tab" data-tab="favorites">♥ Liked Songs</button>
+            <button class="lib-tab" data-tab="playlists">📁 Playlists</button>
+            <button class="lib-tab" data-tab="local">📂 Local Audio</button>
+          </div>
+          <button id="libPlayAllBtn" class="primary-btn" style="margin-left:auto;">▶ Play All</button>
+        </div>
+
+        <div id="libraryList" class="library-list"></div>
+      </div>
+
+      <!-- 3. FAVORITES VIEW -->
+      <div id="favoritesView" class="view hidden">
+        <div class="page-title">
+          <p class="eyebrow">YOUR PICKS</p>
+          <h1>Favorites</h1>
+          <p id="favSubtitle" style="color:var(--muted); font-size:13px; margin-top:4px;">0 liked tracks</p>
+        </div>
+        <div class="page-action-row">
+          <button id="playAllFavsBtn" class="primary-btn">▶ Play Liked Songs</button>
+          <button id="shuffleFavsBtn" class="secondary-btn">⤨ Shuffle</button>
+          <button id="downloadAllFavsBtn" class="secondary-btn">⬇ Download All</button>
+        </div>
+        <div id="favoriteList" class="library-list"></div>
+      </div>
+
+      <!-- 4. DOWNLOADS VIEW -->
+      <div id="downloadsView" class="view hidden">
+        <div class="page-title">
+          <p class="eyebrow">OFFLINE AUDIO BLOBS</p>
+          <h1>Downloaded Songs</h1>
+          <p id="dlSubtitle" style="color:var(--muted); font-size:13px; margin-top:4px;">0 songs saved for offline playback</p>
+        </div>
+        <div class="page-action-row">
+          <button id="playAllDlsBtn" class="primary-btn">▶ Play Downloaded Songs</button>
+          <button id="shuffleDlsBtn" class="secondary-btn">⤨ Shuffle</button>
+        </div>
+        <div id="downloadList" class="library-list"></div>
+      </div>
+
+      <!-- 5. PLAYLIST DETAILS VIEW -->
+      <div id="playlistDetailView" class="view hidden">
+        <div class="page-title">
+          <p class="eyebrow">CUSTOM PLAYLIST</p>
+          <h1 id="customPlTitle">Playlist Name</h1>
+          <p id="customPlDesc" style="color:var(--muted); font-size:13px; margin-top:4px;">Created by you</p>
+        </div>
+        <div class="page-action-row">
+          <button id="playCustomPlBtn" class="primary-btn">▶ Play Playlist</button>
+          <button id="deleteCustomPlBtn" class="secondary-btn" style="color:var(--danger); border-color:rgba(251,113,133,0.3);">🗑 Delete</button>
+        </div>
+        <div id="playlistTracksList" class="library-list"></div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- BOTTOM PLAYER BAR -->
+  <footer class="player">
+    <div class="now-playing">
+      <div id="playerArt" class="mini-art">♫</div>
+      <div class="now-text">
+        <strong id="nowTitle">Chuttamalle (From "Devara")</strong>
+        <span id="nowArtist">Anirudh Ravichander</span>
+      </div>
+      <div class="player-track-actions">
+        <button id="favBtn" class="heart-btn" title="Add to Favorites">♡</button>
+        <button id="dlBtn" class="dl-btn-player" title="Download for Offline">⬇</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="main-controls">
+        <button id="shuffleBtn" class="control-btn" title="Shuffle">⤨</button>
+        <button id="prevBtn" class="control-btn" title="Previous">◀</button>
+        <button id="playBtn" class="play-btn" title="Play / Pause">▶</button>
+        <button id="nextBtn" class="control-btn" title="Next">▶</button>
+        <button id="repeatBtn" class="control-btn" title="Repeat">↻</button>
+      </div>
+      <div class="progress-row">
+        <span id="currentTime">0:00</span>
+        <input id="progress" type="range" min="0" max="100" value="0">
+        <span id="duration">0:00</span>
+      </div>
+    </div>
+
+    <div class="volume">
+      <button id="playerSettingsBtn" class="icon-btn" title="Equalizer & Settings">🎚</button>
+      <span id="volumeIcon" style="cursor:pointer;" title="Mute/Unmute">🔊</span>
+      <input id="volume" type="range" min="0" max="1" step="0.01" value="0.8">
+      <span id="volumePct" class="volume-pct">80%</span>
+    </div>
+  </footer>
+
+  <!-- CANVAS VISUALIZER AT BOTTOM OF SCREEN -->
+  <canvas id="visualizer" aria-hidden="true"></canvas>
+
+  <!-- MODAL 1: AUTHENTICATION (LOGIN / SIGN UP / GUEST) -->
+  <div id="authModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="brand-icon" style="width:28px; height:28px; font-size:14px;">♫</span>
+          <h3>Audio Streamer Hub</h3>
+        </div>
+        <button id="closeAuthBtn" class="modal-close-btn" title="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="auth-tabs-row">
+          <button id="tabLogin" class="auth-tab-btn active">Log In</button>
+          <button id="tabSignup" class="auth-tab-btn">Sign Up</button>
+        </div>
+
+        <!-- Log In Form -->
+        <form id="loginForm" class="auth-form">
+          <!-- 1-Click Demo Account Card -->
+          <div class="quick-demo-card">
+            <div class="demo-card-head">
+              <span class="demo-badge">⚡ Instant Demo</span>
+              <span class="demo-meta">demo@hub.com &bull; password123</span>
+            </div>
+            <button type="button" id="quickDemoBtn" class="demo-action-btn">
+              <span>🚀 1-Click Demo Login</span>
+            </button>
+          </div>
+
+          <div class="auth-divider"><span>or log in with credentials</span></div>
+
+          <div class="form-group">
+            <label for="loginEmail">Email Address</label>
+            <input type="email" id="loginEmail" placeholder="name@example.com" autocomplete="email" required>
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">Password</label>
+            <div class="pwd-input-wrap">
+              <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" required>
+              <button type="button" id="toggleLoginPwd" class="pwd-eye-btn" title="Show / Hide Password" aria-label="Toggle password visibility">👁</button>
+            </div>
+          </div>
+          <p id="loginError" class="auth-error hidden"></p>
+          <button type="submit" class="primary-btn" style="justify-content:center; width:100%;">Log In</button>
+          
+          <div class="auth-switch-prompt">
+            <span>Don't have an account?</span>
+            <button type="button" id="toSignupLink" class="auth-link-btn">Create one (Sign Up)</button>
+          </div>
+        </form>
+
+        <!-- Sign Up Form -->
+        <form id="signupForm" class="auth-form hidden">
+          <div class="form-group">
+            <label for="signupUsername">Username</label>
+            <input type="text" id="signupUsername" placeholder="e.g. Chaithanya / Music Lover" autocomplete="nickname" required>
+          </div>
+          <div class="form-group">
+            <label for="signupEmail">Email Address</label>
+            <input type="email" id="signupEmail" placeholder="name@example.com" autocomplete="email" required>
+          </div>
+          <div class="form-group">
+            <label for="signupPassword">Password</label>
+            <div class="pwd-input-wrap">
+              <input type="password" id="signupPassword" placeholder="Minimum 4 characters" minlength="4" autocomplete="new-password" required>
+              <button type="button" id="toggleSignupPwd" class="pwd-eye-btn" title="Show / Hide Password" aria-label="Toggle password visibility">👁</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Pick Avatar</label>
+            <div class="avatar-selector">
+              <button type="button" class="avatar-opt active" data-avatar="🎧">🎧</button>
+              <button type="button" class="avatar-opt" data-avatar="🎵">🎵</button>
+              <button type="button" class="avatar-opt" data-avatar="🎸">🎸</button>
+              <button type="button" class="avatar-opt" data-avatar="⚡">⚡</button>
+              <button type="button" class="avatar-opt" data-avatar="👑">👑</button>
+            </div>
+          </div>
+          <p id="signupError" class="auth-error hidden"></p>
+          <button type="submit" class="primary-btn" style="justify-content:center; width:100%;">Create Account</button>
+          
+          <div class="auth-switch-prompt">
+            <span>Already have an account?</span>
+            <button type="button" id="toLoginLink" class="auth-link-btn">Log In</button>
+          </div>
+        </form>
+
+        <div class="auth-divider"><span>OR</span></div>
+
+        <button id="guestBtn" class="secondary-btn" style="justify-content:center; width:100%;">🎧 Continue as Guest</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: AUDIO SETTINGS & HARDWARE EQUALIZER -->
+  <div id="settingsModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span>🎚</span>
+          <h3>Audio Settings & Equalizer</h3>
+        </div>
+        <button id="closeSettingsBtn" class="modal-close-btn" title="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        
+        <!-- Volume Master -->
+        <div class="setting-item">
+          <div class="setting-title-row">
+            <div>
+              <strong>Master Output Level</strong>
+              <p>Adjust exact listening volume</p>
+            </div>
+            <span id="settingsVolDisplay" class="badge-val">80%</span>
+          </div>
+          <input id="settingsVolRange" type="range" min="0" max="1" step="0.01" value="0.8">
+        </div>
+
+        <!-- Playback Speed -->
+        <div class="setting-item">
+          <div class="setting-title-row">
+            <div>
+              <strong>Playback Speed</strong>
+              <p>Speed up or slow down playback rate</p>
+            </div>
+            <span id="settingsSpeedDisplay" class="badge-val">1.0x</span>
+          </div>
+          <div class="speed-grid">
+            <button class="speed-btn" data-speed="0.5">0.5x</button>
+            <button class="speed-btn" data-speed="0.75">0.75x</button>
+            <button class="speed-btn active" data-speed="1.0">1.0x</button>
+            <button class="speed-btn" data-speed="1.25">1.25x</button>
+            <button class="speed-btn" data-speed="1.5">1.5x</button>
+            <button class="speed-btn" data-speed="2.0">2.0x</button>
+          </div>
+        </div>
+
+        <!-- Hardware Equalizer (Web Audio API) -->
+        <div class="setting-item">
+          <div class="setting-title-row">
+            <div>
+              <strong>5-Band Hardware Equalizer</strong>
+              <p>Dynamic frequency shaping via Web Audio API</p>
+            </div>
+          </div>
+
+          <div class="eq-presets-chips">
+            <button class="eq-preset-chip active" data-preset="flat">Flat</button>
+            <button class="eq-preset-chip" data-preset="bass">Bass Booster</button>
+            <button class="eq-preset-chip" data-preset="treble">Treble Booster</button>
+            <button class="eq-preset-chip" data-preset="acoustic">Acoustic</button>
+            <button class="eq-preset-chip" data-preset="rock">Rock</button>
+            <button class="eq-preset-chip" data-preset="vocal">Vocal Booster</button>
+            <button class="eq-preset-chip" data-preset="electronic">Electronic</button>
+          </div>
+
+          <div class="eq-sliders-row">
+            <div class="eq-col">
+              <span id="eqVal60" class="eq-col-val">0dB</span>
+              <input type="range" min="-12" max="12" step="1" value="0" class="vertical-eq-range" data-band="60" id="band60">
+              <span class="eq-col-freq">60Hz</span>
+            </div>
+            <div class="eq-col">
+              <span id="eqVal230" class="eq-col-val">0dB</span>
+              <input type="range" min="-12" max="12" step="1" value="0" class="vertical-eq-range" data-band="230" id="band230">
+              <span class="eq-col-freq">230Hz</span>
+            </div>
+            <div class="eq-col">
+              <span id="eqVal910" class="eq-col-val">0dB</span>
+              <input type="range" min="-12" max="12" step="1" value="0" class="vertical-eq-range" data-band="910" id="band910">
+              <span class="eq-col-freq">910Hz</span>
+            </div>
+            <div class="eq-col">
+              <span id="eqVal3600" class="eq-col-val">0dB</span>
+              <input type="range" min="-12" max="12" step="1" value="0" class="vertical-eq-range" data-band="3600" id="band3600">
+              <span class="eq-col-freq">3.6kHz</span>
+            </div>
+            <div class="eq-col">
+              <span id="eqVal14000" class="eq-col-val">0dB</span>
+              <input type="range" min="-12" max="12" step="1" value="0" class="vertical-eq-range" data-band="14000" id="band14000">
+              <span class="eq-col-freq">14kHz</span>
+            </div>
+          </div>
+        </div>
+
+        <button id="applySettingsBtn" class="primary-btn" style="width:100%; justify-content:center;">Apply Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: CREATE PLAYLIST -->
+  <div id="playlistModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Create New Playlist</h3>
+        <button id="closePlModalBtn" class="modal-close-btn" title="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="createPlForm" class="auth-form">
+          <div class="form-group">
+            <label>Playlist Name</label>
+            <input type="text" id="newPlName" placeholder="My Top Telugu Hits" required>
+          </div>
+          <div class="form-group">
+            <label>Description (Optional)</label>
+            <textarea id="newPlDesc" rows="2" placeholder="Favorites for workouts and chill..."></textarea>
+          </div>
+          <button type="submit" class="primary-btn" style="width:100%; justify-content:center;">Create Playlist</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 4: ADD TO PLAYLIST -->
+  <div id="addToPlModal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Add to Playlist</h3>
+        <button id="closeAddToPlBtn" class="modal-close-btn" title="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="addToPlList" class="playlist-chips"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATIONS BOX -->
+  <div id="toastBox" class="toast-box"></div>
+
+  <!-- AUDIO ELEMENT -->
+  <audio id="audio" preload="metadata" crossorigin="anonymous"></audio>
+
+  <!-- SCRIPTS -->
+  <script src="db.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
