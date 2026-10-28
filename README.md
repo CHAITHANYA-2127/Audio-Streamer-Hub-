@@ -1,7 +1,7 @@
 # 🎵 Audio Streamer Hub
 
-> **Live Demo (GitHub Pages)**: [https://chaithanya-2127.github.io/Audio-Streamer-Hub-/](https://chaithanya-2127.github.io/Audio-Streamer-Hub-/)  
-> **Repository**: [https://github.com/CHAITHANYA-2127/Audio-Streamer-Hub-](https://github.com/CHAITHANYA-2127/Audio-Streamer-Hub-)
+> **Live Demo (GitHub Pages)**: [https://github.io/Audio-Streamer-Hub-/](https://github.io/Audio-Streamer-Hub-/)  
+> **Repository**: [https://github.com//Audio-Streamer-Hub-](https://github.com//Audio-Streamer-Hub-)
 
 **Audio Streamer Hub** is a premium, high-productivity music streaming platform built with modern HTML5, Vanilla CSS glassmorphism, JavaScript, Node.js, Express, and a dual-engine storage architecture (MySQL 8.0 + Resilient IndexedDB/LocalStorage fallback).
 
