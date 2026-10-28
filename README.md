@@ -1,97 +1,103 @@
-# ♫ Audio Streamer Hub
+# 🎵 Audio Streamer Hub
 
-A modern, high-fidelity **Spotify-styled** web music streaming and offline audio player built with **HTML5, Vanilla CSS, JavaScript, Web Audio API, and IndexedDB Database**.
+> **Live Demo (GitHub Pages)**: [https://chaithanya-2127.github.io/Audio-Streamer-Hub-/](https://chaithanya-2127.github.io/Audio-Streamer-Hub-/)  
+> **Repository**: [https://github.com/CHAITHANYA-2127/Audio-Streamer-Hub-](https://github.com/CHAITHANYA-2127/Audio-Streamer-Hub-)
 
-🌐 **Live URL**: [https://chaithanya-2127.github.io/Audio-Streamer-Hub-/](https://chaithanya-2127.github.io/Audio-Streamer-Hub-/)  
-⚡ **Demo Account (Instant 1-Click Login)**: `demo@hub.com` | `password123`
-
----
-
-## 🌟 Features Implemented (User Requirements)
-
-1. **Songs Catalog (పాటలు)**:
-   - Curated with top **Telugu Chartbusters** (*Devara Part 1*, *RRR*, *Pushpa 2*, *Guntur Kaaram*, *Kalki 2898 AD*, *Ala Vaikunthapurramuloo*, *Jathi Ratnalu*), **Bollywood Melodies** (*Kesariya*, *Chaleya*, *Srivalli*), **Global Top 50** (*The Weeknd*, *Ed Sheeran*, *Dua Lipa*, *Imagine Dragons*), and **Lo-Fi / Chill Beats**.
-   - High-quality streaming audio previews and HD album artwork.
-
-2. **Real-Time Live Search (వెతకడానికి Search Feature)**:
-   - Search across millions of Telugu songs, Bollywood tracks, global artists, and albums.
-   - Powered by real-time iTunes Search API with instant 300ms debounce and loading spinner.
-   - Quick category chips (*Devara*, *Anirudh*, *Pushpa 2*, *Sid Sriram*, *Arijit Singh*, *RRR*, *The Weeknd*, *Thaman S*).
-
-3. **Favorites / Liked Songs (లైక్ చేస్తే Favourites లో సేవ్ అవ్వడం)**:
-   - Click the Heart (`♡` / `♥`) icon on any card, table row, or the bottom player bar.
-   - Saved persistently in browser **IndexedDB Database** under `favorites` table.
-   - Dedicated **"Liked Songs"** view with Spotify-style gradient banner, "Play All", "Shuffle All", and track counters.
-
-4. **My Library & Offline Downloads (My Library లో Download చేసుకున్న పాటలు రావడం)**:
-   - Click `⬇` (Download) on any song to fetch its binary audio `Blob` and save it directly into the local IndexedDB database.
-   - Shows a green checkmark `✓` and badge when downloaded.
-   - In **"Your Library" -> "Downloaded (Offline)"** tab, all downloaded songs appear with their exact file size (e.g. `2.4 MB`), download date, and instant offline play button.
-   - **Local Audio Upload (`＋ Local Audio`)**: Import your own `.mp3` / `.wav` files from your computer directly into your library!
-
-5. **User Login & Sign Up (Login / Sign In Modal)**:
-   - Spotify-style Authentication Modal.
-   - Features **Sign Up** (Username, Email, Password, Custom Avatar picker), **Log In**, and **"Continue as Guest"**.
-   - User sessions are stored and segregated so each user has their own unique favorites, downloads, playlists, and settings.
-
-6. **Online / Offline Mode Toggle (ఆన్‌లైన్ & ఆఫ్‌లైన్ మోడ్)**:
-   - Header toggle switch: `🟢 Online` ↔ `📴 Offline Mode`.
-   - Automatic detection: Listens to browser connectivity (`window.ononline` / `window.onoffline`).
-   - In **Offline Mode**, an alert banner appears and the app plays songs directly from IndexedDB without needing an active internet connection!
-
-7. **Spotify-Style Volume & Audio Settings (వాల్యూమ్ సెట్టింగ్స్)**:
-   - Bottom player volume slider with fill percentage, hover thumb, and dynamic mute/unmute speaker icon (`🔊`, `🔉`, `🔈`, `🔇`).
-   - **Audio & Volume Settings Modal (`🎚`)**:
-     - Master Volume slider with decibel & percentage indicator.
-     - **Normalize Volume** toggle (Spotify feature).
-     - **Crossfade** slider (Off, 1s - 12s).
-     - **Playback Speed** pills (`0.5x`, `0.75x`, `1.0x (Normal)`, `1.25x`, `1.5x`, `2.0x`).
-     - **Audio Quality** selector (`Normal 96 kbps`, `High 160 kbps`, `Very High 320 kbps`).
-     - **Web Audio API Hardware Equalizer**:
-       - 5-Band Equalizer (`60Hz`, `230Hz`, `910Hz`, `3.6kHz`, `14kHz`) powered by `BiquadFilterNode`.
-       - Instant sound presets: *Flat*, *Bass Booster*, *Treble Booster*, *Acoustic*, *Rock*, *Vocal Booster*, *Electronic*.
-
-8. **Aesthetic & Identity (Audio Streamer Hub)**:
-   - Branded as **Audio Streamer Hub** with glowing green soundwave icon.
-   - Ultra-premium Spotify Dark Theme (`#121212`, `#181818`, `#1ed760` Spotify Green).
-   - Emerging green play buttons on card hover, glassmorphism topbar, and real-time live **Audio Visualizer Canvas** dancing to the beat!
+**Audio Streamer Hub** is a premium, high-productivity music streaming platform built with modern HTML5, Vanilla CSS glassmorphism, JavaScript, Node.js, Express, and a dual-engine storage architecture (MySQL 8.0 + Resilient IndexedDB/LocalStorage fallback).
 
 ---
 
-## 🚀 How to Run
+## 🌟 Key Features
 
-### Option 1: Run with Local Node Server (Recommended)
-1. Open PowerShell or Terminal in the project folder:
+### 1. ✈️ Instagram-Style Direct Friend Chat & Song Sharing (`Messages`)
+- **2-Column Instagram DM Interface**: Chat directly with friends (Rahul, Priya, Vikram, Sneha, Karthik) with live presence and status indicators.
+- **In-App Song Cards**: Click the **`✈` (Share)** icon on any song card or player bar to send tracks directly into friend conversations.
+- **Playable in Chat**: Friend and user can hit **`▶ Play`** right inside the chat bubble to immediately stream the song in the main bottom player.
+- **Realistic Simulated DM Replies**: Friends reply naturally with feedback and playlist reactions.
+- **External Sharing**: One-click **Copy Link**, **WhatsApp**, and **Instagram DM** sharing.
+
+### 2. 👑 Admin Studio & Catalog Song Manager (`Admin Studio`)
+- **Add & Publish New Songs**: Easily add any song to the live streaming catalog (Telugu, Bollywood, Global, Lo-Fi) with title, artist, album, genre, duration, and cover image.
+- **Live Song Card Preview**: Real-time visual card preview as you type before publishing.
+- **Audio File Upload**: Provide an online streaming MP3/AAC URL or attach a local audio file directly from your computer.
+- **⚡ 1-Click Sample Telugu Blockbusters**: Instantly populate the catalog with *Game Changer (Raa Macha Macha)*, *Pushpa 2 (Sooseki)*, *Saripodhaa Sanivaaram (Garam Garam)*, and *OG (Fire Storm)*!
+- **Catalog Management Table**: Search, filter, play preview, and delete custom tracks.
+
+### 3. 🗄️ Database & Account Management Hub (`Database`)
+- **Dual-Engine Live Status**: Real-time inspection of MySQL 8.0 database connection and browser persistent IndexedDB storage.
+- **Live KPI Counters**: Real-time counts of Active User Session, Liked Songs (`favorites`), Offline Audio Blobs (`downloads` in MBs), Custom Playlists, Listening History, and Chat Messages.
+- **⬇ Export Database Backup (JSON)**: Download your entire account, playlists, and history in a single JSON backup file.
+- **↻ Live Stats Refresh & 🗑 Cache Clear**: Re-scan database metrics or reset demo cache on demand.
+
+### 4. 🎤 Sing-Along Live Karaoke Lyrics & ⏱ Sleep Timer
+- **Live Karaoke Lyrics**: Micro-synchronized lyrics that highlight and smooth-scroll as the music plays. Click any lyric line to jump directly to that timestamp.
+- **Sleep Timer**: Choose 15m, 30m, 45m, 1h, or "End of Track" to automatically fade out and pause playback.
+
+### 5. 🎧 Audio Fidelity & Hardware Equalizer
+- **5-Band Equalizer**: Web Audio API biquad filters for 60Hz, 230Hz, 910Hz, 3.6kHz, and 14kHz with Bass Boost, Vocal, Rock, Pop, and Flat presets.
+- **Real-Time Visualizer**: Dynamic animated sound waves synced with audio frequencies.
+- **True Offline Downloads**: Full binary audio blobs saved directly in IndexedDB for 100% offline playback.
+
+---
+
+## 🚀 How to Run Locally
+
+### Prerequisites
+- Node.js 18 or later
+- (Optional) MySQL 8.0 server (if MySQL is offline, the app seamlessly runs in resilient in-memory mode without errors)
+
+### Steps
+1. Clone the repository:
    ```bash
-   node server.js
+   git clone https://github.com/CHAITHANYA-2127/Audio-Streamer-Hub-.git
+   cd Audio-Streamer-Hub-
    ```
-2. Open your browser and visit:
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. (Optional) Configure environment:
+   ```bash
+   cp .env.example .env
+   ```
+4. Start the server:
+   ```bash
+   npm start
+   ```
+5. Open your browser at:
    ```
    http://localhost:3000
    ```
-
-### Option 2: Open Directly in Any Browser
-Simply double-click `index.html` or drag it into Chrome, Edge, Brave, or Firefox. All features (IndexedDB, audio playback, search, equalizer) work out-of-the-box!
+   **Quick Demo Login**: `demo@hub.com` / `password123` (or click *"⚡ 1-Click Quick Demo Login"*).
 
 ---
 
-## ⌨ Keyboard Shortcuts
+## 📡 API Endpoints
 
-| Shortcut | Action |
-|---|---|
-| `Space` | Play / Pause |
-| `Arrow Right` | Seek Forward 5 seconds |
-| `Arrow Left` | Seek Backward 5 seconds |
-| `Arrow Up` | Volume Up (+5%) |
-| `Arrow Down` | Volume Down (-5%) |
-| `M` | Mute / Unmute Toggle |
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/api/health` | Check server and database engine status |
+| `POST` | `/api/auth/login` | Authenticate user session |
+| `POST` | `/api/auth/register` | Register new user account |
+| `GET` | `/api/auth/me` | Get current active user |
+| `POST` | `/api/auth/logout` | Terminate session |
+| `GET` | `/api/friends` | Get list of friends with presence and status |
+| `GET` | `/api/messages/:friendId` | Get chat messages thread with song cards |
+| `POST` | `/api/messages/:friendId` | Send a direct message or share a track |
+| `GET` | `/api/database/diagnostics` | Live database & storage metrics |
+| `GET` | `/api/admin/tracks` | Get all admin-added catalog tracks |
+| `POST` | `/api/admin/tracks` | Publish a new song to live catalog |
+| `DELETE` | `/api/admin/tracks/:id` | Remove a custom track from catalog |
+| `GET` | `/api/plans` | List available membership tiers |
 
 ---
 
-## 🗄 Database Schema (IndexedDB: `AudioStreamerHubDB`)
+## 🌐 Deployment (GitHub Pages)
 
-- **`users`**: User ID, username, email, password, avatar, created date.
-- **`favorites`**: User ID, track ID, song title, artist, album, cover art, added date.
-- **`downloads`**: User ID, track ID, metadata, full binary **audio `Blob`**, size in bytes, download timestamp.
-- **`playlists`**: User ID, playlist ID, name, description, tracks array.
-- **`settings`**: User ID, volume, equalizer presets, audio quality, crossfade duration.
+This project includes automated GitHub Actions deployment in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml). Any push to `main` automatically updates and hosts the latest build on GitHub Pages:
+
+👉 **[https://chaithanya-2127.github.io/Audio-Streamer-Hub-/](https://chaithanya-2127.github.io/Audio-Streamer-Hub-/)**
+
+---
+
+© 2026 Chaithanya • Audio Streamer Hub

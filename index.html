@@ -35,6 +35,23 @@
       <!-- Audio Settings / Equalizer Modal Trigger -->
       <button id="settingsBtn" class="icon-btn" title="Audio Settings & Equalizer">🎚</button>
 
+      <!-- Instagram-Style Direct Messages / Friends Shortcut -->
+      <button id="topbarDmBtn" class="icon-btn dm-badge-wrap" title="Friends & Song Sharing (Instagram DM style)">
+        <span>💬</span>
+        <span class="active-dot"></span>
+      </button>
+
+      <!-- Database Hub Shortcut -->
+      <button id="topbarDbBtn" class="secondary-btn db-pill-btn" title="Live Database & Account Architecture">
+        <span class="db-dot"></span>
+        <span>Database Hub</span>
+      </button>
+
+      <!-- Admin Studio Shortcut -->
+      <button id="topbarAdminBtn" class="primary-btn sm-pill admin-badge-btn" title="Admin Studio: Add & Manage Songs">
+        <span>👑 Admin Studio</span>
+      </button>
+
       <!-- Header Quick Log In Button -->
       <button id="headerLoginBtn" class="primary-btn header-login-pill" title="Log In / Sign Up">
         <span>🔑</span>
@@ -55,6 +72,9 @@
           </div>
           <hr class="dropdown-hr">
           <button id="menuLoginBtn" class="dropdown-link">🔑 Log In / Sign Up</button>
+          <button id="menuAdminBtn" class="dropdown-link">👑 Admin Studio (Song Manager)</button>
+          <button id="menuDbBtn" class="dropdown-link">🗄 Database & Account Hub</button>
+          <button id="menuDmBtn" class="dropdown-link">💬 Friends & Direct Messages</button>
           <button id="menuSettingsBtn" class="dropdown-link">⚙ Audio Settings</button>
           <button id="menuOfflineBtn" class="dropdown-link">📴 Offline Mode</button>
           <hr class="dropdown-hr">
@@ -93,6 +113,24 @@
           <span>⬇</span>
           <span>Downloaded</span>
           <span id="dlCountBadge" class="nav-badge">0</span>
+        </button>
+        <button class="nav-item" data-view="plans">
+          <span>✦</span>
+          <span>Membership</span>
+        </button>
+        <button class="nav-item" data-view="messages">
+          <span>💬</span>
+          <span>Friends & DMs</span>
+          <span id="unreadBadge" class="nav-badge pulse">2</span>
+        </button>
+        <button class="nav-item" data-view="database">
+          <span>🗄️</span>
+          <span>Database Hub</span>
+        </button>
+        <button class="nav-item" data-view="admin">
+          <span>👑</span>
+          <span>Admin Studio</span>
+          <span class="nav-badge admin-badge">NEW</span>
         </button>
       </nav>
 
@@ -203,6 +241,7 @@
             <button class="lib-tab" data-tab="downloads">⬇ Downloaded (Offline)</button>
             <button class="lib-tab" data-tab="favorites">♥ Liked Songs</button>
             <button class="lib-tab" data-tab="playlists">📁 Playlists</button>
+            <button class="lib-tab" data-tab="history">Recently Played</button>
             <button class="lib-tab" data-tab="local">📂 Local Audio</button>
           </div>
           <button id="libPlayAllBtn" class="primary-btn" style="margin-left:auto;">▶ Play All</button>
@@ -254,6 +293,326 @@
         <div id="playlistTracksList" class="library-list"></div>
       </div>
 
+      <!-- 6. MEMBERSHIP PLANS VIEW -->
+      <div id="plansView" class="view hidden">
+        <div class="page-title">
+          <p class="eyebrow">LISTEN YOUR WAY</p>
+          <h1>Membership Plans</h1>
+          <p style="color:var(--muted); font-size:13px; margin-top:4px;">Choose a plan for your listening experience. This project demo does not process real payments.</p>
+        </div>
+        <section class="subscription-status" aria-live="polite">
+          <div><span class="plan-status-label">YOUR PLAN</span><strong id="currentPlanName">Free</strong></div>
+          <p id="currentPlanDescription">You are listening on the free plan.</p>
+          <button id="cancelPlanBtn" class="secondary-btn hidden" type="button">Cancel plan</button>
+        </section>
+        <div id="plansGrid" class="plans-grid" aria-live="polite"></div>
+      </div>
+
+      <!-- 7. INSTAGRAM-STYLE FRIENDS & DIRECT MESSAGING VIEW -->
+      <div id="messagesView" class="view hidden">
+        <div class="page-title">
+          <p class="eyebrow">SOCIAL & IN-APP DIRECT MESSAGING</p>
+          <h1>Friends & Direct Messages</h1>
+          <p style="color:var(--muted); font-size:13px; margin-top:4px;">Share and play songs with your friends instantly in an Instagram DM style conversation.</p>
+        </div>
+
+        <div class="chat-container">
+          <!-- Left Column: Friends List -->
+          <div class="chat-sidebar">
+            <div class="chat-search-wrap">
+              <input type="text" id="friendSearchInput" placeholder="Search friends & handles..." class="search" style="padding:10px 14px; font-size:13px; width:100%;">
+            </div>
+            <div id="friendsList" class="friends-list"></div>
+          </div>
+
+          <!-- Right Column: Active Conversation -->
+          <div class="chat-main">
+            <div class="chat-header">
+              <div class="chat-friend-meta">
+                <span id="chatActiveAvatar" class="chat-avatar">🎧</span>
+                <div>
+                  <strong id="chatActiveName">Rahul Varma</strong>
+                  <span id="chatActiveStatus" class="chat-status-text">🟢 Online • Vibing to Devara 🔥</span>
+                </div>
+              </div>
+              <div class="chat-header-actions">
+                <button id="chatSendCurrentBtn" class="primary-btn sm-pill" title="Attach currently playing song">
+                  <span>＋ Attach Playing Song</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Messages Thread -->
+            <div id="chatMessages" class="chat-messages"></div>
+
+            <!-- Compose Bar -->
+            <form id="chatForm" class="chat-input-bar">
+              <input type="text" id="chatInput" placeholder="Message friend or send song..." autocomplete="off">
+              <button type="button" id="chatAttachSongBtn" class="chat-attach-btn" title="Attach Currently Playing Song">🎵</button>
+              <button type="submit" class="primary-btn chat-send-btn">Send ✈</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- 8. DATABASE & ACCOUNT MANAGEMENT HUB -->
+      <div id="databaseView" class="view hidden">
+        <div class="page-title">
+          <p class="eyebrow">SYSTEM & STORAGE ARCHITECTURE</p>
+          <h1>Database & Account Hub</h1>
+          <p style="color:var(--muted); font-size:13px; margin-top:4px;">Live inspection of your storage engine, MySQL connection, persistent IndexedDB tables, and account metrics.</p>
+        </div>
+
+        <!-- Connection Diagnostics Hero Card -->
+        <div class="db-hero-card">
+          <div class="db-hero-left">
+            <div class="db-engine-badge">
+              <span id="dbEngineIcon">🟢</span>
+              <strong id="dbEngineTitle">Resilient Dual-Engine Active</strong>
+            </div>
+            <p id="dbEngineDesc" style="color:var(--muted); font-size:13px; margin:8px 0 0;">
+              Browser IndexedDB is actively storing audio blobs, playlists, and favorites. Express server handles API sessions and MySQL database.
+            </p>
+          </div>
+          <div class="db-hero-actions">
+            <button id="dbRefreshBtn" class="secondary-btn">↻ Refresh Stats</button>
+            <button id="dbExportBtn" class="primary-btn">⬇ Export Backup (JSON)</button>
+          </div>
+        </div>
+
+        <!-- Database Metrics KPI Grid -->
+        <div class="db-stats-grid">
+          <div class="db-stat-card">
+            <span class="db-stat-label">Active User Session</span>
+            <strong id="statUserId" class="db-stat-value">Chaithanya (Demo)</strong>
+            <span id="statUserEmail" class="db-stat-sub">demo@hub.com</span>
+          </div>
+          <div class="db-stat-card">
+            <span class="db-stat-label">Liked Songs (Favorites)</span>
+            <strong id="statFavCount" class="db-stat-value">0</strong>
+            <span class="db-stat-sub">IndexedDB `favorites` table</span>
+          </div>
+          <div class="db-stat-card">
+            <span class="db-stat-label">Offline Audio Blobs</span>
+            <strong id="statDlCount" class="db-stat-value">0</strong>
+            <span id="statDlSize" class="db-stat-sub">0.0 MB downloaded</span>
+          </div>
+          <div class="db-stat-card">
+            <span class="db-stat-label">Custom Playlists</span>
+            <strong id="statPlCount" class="db-stat-value">0</strong>
+            <span class="db-stat-sub">IndexedDB `playlists` table</span>
+          </div>
+          <div class="db-stat-card">
+            <span class="db-stat-label">Listening History</span>
+            <strong id="statHistoryCount" class="db-stat-value">0</strong>
+            <span class="db-stat-sub">Recently played audit logs</span>
+          </div>
+          <div class="db-stat-card">
+            <span class="db-stat-label">Friend DM Messages</span>
+            <strong id="statMsgCount" class="db-stat-value">5</strong>
+            <span class="db-stat-sub">Instagram-style chat threads</span>
+          </div>
+        </div>
+
+        <!-- Diagnostics Table -->
+        <div class="db-table-box">
+          <h3>Storage Tables & Schemas</h3>
+          <table class="db-table">
+            <thead>
+              <tr>
+                <th>Store / Table</th>
+                <th>Storage Engine</th>
+                <th>Purpose</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>users</code></td>
+                <td>MySQL + IndexedDB</td>
+                <td>User credentials, hashed password, avatar</td>
+                <td><span class="badge-active">Active</span></td>
+              </tr>
+              <tr>
+                <td><code>favorites</code></td>
+                <td>MySQL + IndexedDB</td>
+                <td>Liked songs with track metadata</td>
+                <td><span class="badge-active">Active</span></td>
+              </tr>
+              <tr>
+                <td><code>downloads</code></td>
+                <td>IndexedDB Blobs</td>
+                <td>Full binary MP3/audio blobs for offline playback</td>
+                <td><span class="badge-active">Active</span></td>
+              </tr>
+              <tr>
+                <td><code>playlists</code></td>
+                <td>MySQL + IndexedDB</td>
+                <td>Custom user playlists & track relationships</td>
+                <td><span class="badge-active">Active</span></td>
+              </tr>
+              <tr>
+                <td><code>chat_messages</code></td>
+                <td>In-Memory & LocalStorage</td>
+                <td>Instagram-style friend song shares and messages</td>
+                <td><span class="badge-active">Active</span></td>
+              </tr>
+              <tr>
+                <td><code>listening_history</code></td>
+                <td>MySQL + LocalStorage</td>
+                <td>Recently played track audit logs</td>
+                <td><span class="badge-active">Active</span></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="db-admin-actions">
+            <button id="dbClearCacheBtn" class="text-btn danger">🗑 Clear Cache & Reset Demo Data</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 9. ADMIN STUDIO & SONG MANAGEMENT VIEW -->
+      <div id="adminView" class="view hidden">
+        <div class="page-title">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+            <div>
+              <p class="eyebrow">ADMINISTRATION & CATALOG CONTROL</p>
+              <h1>👑 Admin Studio & Song Manager</h1>
+              <p style="color:var(--muted); font-size:13px; margin-top:4px;">Add, edit, and publish new Telugu, Bollywood, and Global songs directly into the live audio catalog.</p>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+              <button id="adminQuickAddSamplesBtn" class="secondary-btn" style="border-color:rgba(245, 158, 11, 0.4); color:#f59e0b;">
+                ⚡ Add Sample Telugu Hits
+              </button>
+              <button id="adminResetCatalogBtn" class="secondary-btn" style="color:var(--danger); border-color:rgba(251,113,133,0.3);">
+                ↻ Reset Custom Songs
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add Song Form & Live Preview Card -->
+        <div class="admin-grid-layout">
+          <!-- Form Card -->
+          <div class="admin-form-card">
+            <h3>＋ Add New Song to Catalog</h3>
+            <p style="font-size:13px; color:var(--muted); margin-bottom:16px;">
+              Fill in the details below. Once published, the song will appear on the Home screen, search results, genre filters, and queue for all users!
+            </p>
+            <form id="adminSongForm" class="auth-form">
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label>Song Title *</label>
+                  <input type="text" id="adminSongTitle" placeholder="e.g. Raa Macha Macha" required>
+                </div>
+                <div class="form-group">
+                  <label>Artist Name(s) *</label>
+                  <input type="text" id="adminSongArtist" placeholder="e.g. Thaman S, Nakash Aziz" required>
+                </div>
+              </div>
+
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label>Album / Movie *</label>
+                  <input type="text" id="adminSongAlbum" placeholder="e.g. Game Changer" required>
+                </div>
+                <div class="form-group">
+                  <label>Genre / Category *</label>
+                  <select id="adminSongGenre" class="auth-input" style="width:100%; padding:10px 14px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; border-radius:10px;">
+                    <option value="telugu" selected>Telugu Chartbusters</option>
+                    <option value="bollywood">Bollywood Melodies</option>
+                    <option value="global">Global Top 50</option>
+                    <option value="chill">Lo-Fi & Chill</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label>Duration (Seconds or MM:SS) *</label>
+                  <input type="text" id="adminSongDuration" placeholder="e.g. 210 or 3:30" value="210" required>
+                </div>
+                <div class="form-group">
+                  <label>Cover Image URL *</label>
+                  <input type="url" id="adminSongCover" placeholder="https://is1-ssl.mzstatic.com/..." required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Audio Stream URL (MP3 / AAC / M4A) *</label>
+                <div style="display:flex; gap:8px;">
+                  <input type="url" id="adminSongAudio" placeholder="https://audio-ssl.itunes.apple.com/... or MP3 link" style="flex:1;" required>
+                  <button type="button" id="adminPickAudioFileBtn" class="secondary-btn" title="Pick local audio file">📁 Upload MP3</button>
+                  <input type="file" id="adminAudioFileInput" accept="audio/*" style="display:none;">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Sing-Along Lyrics (Optional - one line per row)</label>
+                <textarea id="adminSongLyrics" rows="3" placeholder="Enter lyrics for Karaoke mode..."></textarea>
+              </div>
+
+              <button type="submit" class="primary-btn" style="width:100%; justify-content:center; padding:12px; font-weight:700; background:linear-gradient(135deg, #8b5cf6, #ec4899);">
+                🚀 Publish Song to Live Catalog
+              </button>
+            </form>
+          </div>
+
+          <!-- Live Preview Side Card -->
+          <div class="admin-preview-box">
+            <h3>Live Song Card Preview</h3>
+            <p style="font-size:12px; color:var(--muted); margin-bottom:12px;">This is how listeners will see your song card:</p>
+            <div id="adminCardPreview" class="track-card preview-card">
+              <div class="cover">
+                <img id="prevCover" src="https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80" alt="Preview Cover">
+                <div class="cover-play-badge">▶</div>
+              </div>
+              <div id="prevTitle" class="track-title">Song Title</div>
+              <div id="prevArtist" class="track-meta">Artist Name • Album</div>
+              <div class="card-actions">
+                <button class="card-fav-btn">♡</button>
+                <button class="card-dl-btn">⬇</button>
+                <button class="card-pl-btn">＋</button>
+                <button class="card-share-btn">✈</button>
+              </div>
+            </div>
+
+            <div class="admin-help-box">
+              <strong>💡 Pro Tip:</strong>
+              <p>You can paste iTunes preview links, Pixabay MP3 links, or upload any audio file directly from your computer!</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Manage Catalog Table -->
+        <div class="db-table-box" style="margin-top:28px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+            <div>
+              <h3>Active Catalog Songs</h3>
+              <p id="adminCatalogCount" style="font-size:13px; color:var(--muted);">Total songs in catalog</p>
+            </div>
+            <input type="text" id="adminCatalogSearch" placeholder="Filter songs by title/artist..." class="search" style="padding:8px 14px; font-size:13px; width:260px;">
+          </div>
+
+          <div style="overflow-x:auto;">
+            <table class="db-table">
+              <thead>
+                <tr>
+                  <th>Song</th>
+                  <th>Artist & Album</th>
+                  <th>Genre</th>
+                  <th>Duration</th>
+                  <th>Type</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="adminCatalogTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </section>
   </main>
 
@@ -268,6 +627,9 @@
       <div class="player-track-actions">
         <button id="favBtn" class="heart-btn" title="Add to Favorites">♡</button>
         <button id="dlBtn" class="dl-btn-player" title="Download for Offline">⬇</button>
+        <button id="playerShareBtn" class="share-btn-player" title="Send Song to Friends (Instagram style)">✈</button>
+        <button id="lyricsBtn" class="lyrics-btn-player" title="Sing-along Live Lyrics">🎤</button>
+        <button id="sleepTimerBtn" class="timer-btn-player" title="Sleep Timer">⏱</button>
       </div>
     </div>
 
@@ -519,6 +881,102 @@
       </div>
       <div class="modal-body">
         <div id="addToPlList" class="playlist-chips"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 5: INSTAGRAM-STYLE DIRECT SONG SHARING SHEET -->
+  <div id="shareModal" class="modal-overlay hidden">
+    <div class="modal-box share-modal-box">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:18px;">✈</span>
+          <h3>Send Song to Friends</h3>
+        </div>
+        <button id="closeShareBtn" class="modal-close-btn" title="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Song Preview Card in Share Sheet -->
+        <div id="shareSongPreview" class="share-song-preview">
+          <div id="shareSongArt" class="share-art">♫</div>
+          <div class="share-song-meta">
+            <strong id="shareSongTitle">Chuttamalle</strong>
+            <span id="shareSongArtist">Anirudh Ravichander</span>
+          </div>
+          <button id="shareSongPlayBtn" class="primary-btn sm-pill">▶ Preview</button>
+        </div>
+
+        <div class="form-group" style="margin-top:14px;">
+          <label>Add a note or message (Optional)</label>
+          <input type="text" id="shareNoteInput" placeholder="Bro, check this song out! 🔥">
+        </div>
+
+        <label style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; margin:14px 0 8px; display:block;">Select Friend to Send Direct Message</label>
+        <div id="shareFriendsList" class="share-friends-grid"></div>
+
+        <div class="auth-divider"><span>OR SHARE OUTSIDE APP</span></div>
+
+        <div class="external-share-row">
+          <button id="copyShareLinkBtn" class="secondary-btn share-pill-btn">
+            <span>🔗 Copy Link</span>
+          </button>
+          <button id="waShareBtn" class="secondary-btn share-pill-btn" style="color:#25D366; border-color:rgba(37,211,102,0.3);">
+            <span>💬 WhatsApp</span>
+          </button>
+          <button id="instaShareBtn" class="secondary-btn share-pill-btn" style="color:#E1306C; border-color:rgba(225,48,108,0.3);">
+            <span>📸 Instagram DM</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 6: LIVE LYRICS & SING-ALONG VIEWER -->
+  <div id="lyricsModal" class="modal-overlay hidden">
+    <div class="modal-box lyrics-modal-box">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span>🎤</span>
+          <h3 id="lyricsTrackTitle">Live Lyrics & Sing-Along</h3>
+        </div>
+        <button id="closeLyricsBtn" class="modal-close-btn" title="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="lyrics-karaoke-header">
+          <span class="karaoke-badge">✦ Sing Along Karaoke Mode</span>
+          <span id="lyricsTrackArtist" style="color:var(--muted); font-size:13px;"></span>
+        </div>
+        <div id="lyricsContent" class="lyrics-scroll-box"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 7: SLEEP TIMER MODAL -->
+  <div id="timerModal" class="modal-overlay hidden">
+    <div class="modal-box" style="max-width:380px;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span>⏱</span>
+          <h3>Sleep Timer</h3>
+        </div>
+        <button id="closeTimerBtn" class="modal-close-btn" title="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--muted); font-size:13px; margin:0 0 16px;">
+          Automatically fade out and pause playback when timer completes.
+        </p>
+        <div class="timer-options-grid">
+          <button class="timer-opt-btn" data-minutes="15">15 Minutes</button>
+          <button class="timer-opt-btn" data-minutes="30">30 Minutes</button>
+          <button class="timer-opt-btn" data-minutes="45">45 Minutes</button>
+          <button class="timer-opt-btn" data-minutes="60">1 Hour</button>
+          <button class="timer-opt-btn" data-minutes="end">End of Track</button>
+          <button id="cancelTimerBtn" class="timer-opt-btn cancel-timer" style="color:var(--danger);">Turn Off Timer</button>
+        </div>
+        <div id="timerCountdownBox" class="timer-countdown-box hidden">
+          <span>Active Timer:</span>
+          <strong id="timerCountdownDisplay">00:00</strong>
+        </div>
       </div>
     </div>
   </div>

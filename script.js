@@ -12,7 +12,7 @@
  */
 
 // ================= 1. CURATED SONGS CATALOG =================
-const TRACKS = [
+let TRACKS = [
   // --- TELUGU CHARTBUSTERS ---
   {
     id: "trk_1761152593",
@@ -263,7 +263,15 @@ class StreamerState {
     this.favorites = [];
     this.downloads = [];
     this.playlists = [];
+    this.history = [];
     this.localFiles = [];
+    this.isApiConnected = false;
+    this.activeFriendId = 'fr_1';
+    this.sharingTrack = null;
+    this.sleepTimerId = null;
+    this.sleepTimerEnd = null;
+    this.sleepTimerToEndOfTrack = false;
+    this.chatAttachedTrack = null;
 
     // Equalizer
     this.eqBands = { 60: 0, 230: 0, 910: 0, 3600: 0, 14000: 0 };
@@ -279,6 +287,116 @@ class StreamerState {
 
 const state = new StreamerState();
 const audio = document.getElementById('audio');
+
+// Resilient API Helper
+async function apiRequest(path, options = {}) {
+  const res = await fetch(path, {
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options
+  });
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`);
+  return data;
+}
+
+async function checkApiConnection() {
+  try {
+    const res = await fetch('/api/health');
+    if (res.ok) {
+      const data = await res.json();
+      state.isApiConnected = data.status === 'ok';
+    } else {
+      state.isApiConnected = false;
+    }
+  } catch (_e) {
+    state.isApiConnected = false;
+  }
+}
+
+// Membership Plans Definitions
+const PLANS = [
+  { id: 'free', name: 'Free', priceInr: 0, interval: 'forever', features: ['Stream music previews', 'Create playlists', 'Like songs', 'Offline download demo'] },
+  { id: 'plus', name: 'Hub Plus', priceInr: 99, interval: 'month', features: ['Ad-free listening demo', 'High quality audio demo', 'Unlimited skips', 'Offline library'] },
+  { id: 'family', name: 'Hub Family', priceInr: 149, interval: 'month', features: ['Everything in Plus', 'Up to 6 profiles', 'Shared family plan demo'] }
+];
+const PLAN_NAMES = { free: 'Free', plus: 'Hub Plus', family: 'Hub Family' };
+
+async function refreshSubscription() {
+  const name = document.getElementById('currentPlanName');
+  const description = document.getElementById('currentPlanDescription');
+  const cancel = document.getElementById('cancelPlanBtn');
+  if (!name || !description || !cancel) return;
+  if (!state.currentUser || state.currentUser.id === 'usr_guest') {
+    name.textContent = 'Free';
+    description.textContent = 'You are listening on the free plan.';
+    cancel.classList.add('hidden');
+    return;
+  }
+  let sub = { planId: 'free' };
+  try {
+    if (state.isApiConnected) {
+      const res = await apiRequest('/api/subscription').catch(() => null);
+      if (res?.subscription) sub = res.subscription;
+      else sub = await window.hubDB.getSubscription(state.currentUser.id);
+    } else {
+      sub = await window.hubDB.getSubscription(state.currentUser.id);
+    }
+  } catch (_e) {
+    sub = await window.hubDB.getSubscription(state.currentUser.id);
+  }
+  const planId = sub?.planId || 'free';
+  name.textContent = PLAN_NAMES[planId] || 'Free';
+  description.textContent = planId === 'free' ? 'You are listening on the free plan.' : `Your ${PLAN_NAMES[planId]} demo plan is active.`;
+  cancel.classList.toggle('hidden', planId === 'free');
+}
+
+async function renderPlans() {
+  const grid = document.getElementById('plansGrid');
+  if (!grid) return;
+  let activePlan = 'free';
+  if (state.currentUser && state.currentUser.id !== 'usr_guest') {
+    try {
+      const sub = await window.hubDB.getSubscription(state.currentUser.id);
+      if (sub?.planId) activePlan = sub.planId;
+    } catch (_e) {}
+  }
+  grid.innerHTML = '';
+  PLANS.forEach(plan => {
+    const card = document.createElement('article');
+    card.className = `plan-card ${plan.id === 'plus' ? 'featured' : ''}`;
+    const features = plan.features.map(f => `<li>${f}</li>`).join('');
+    const price = plan.priceInr === 0 ? 'Free' : `₹${plan.priceInr}<small> / month</small>`;
+    const isCurrent = plan.id === activePlan;
+    const actionText = isCurrent ? 'Current Plan' : (plan.id === 'free' ? 'Included' : 'Activate Demo Plan');
+    card.innerHTML = `
+      <h2>${plan.name}</h2>
+      <p class="plan-copy">${plan.id === 'free' ? 'A simple place to start listening.' : 'A project demonstration of a premium membership.'}</p>
+      <div class="plan-price">${price}</div>
+      <ul class="plan-features">${features}</ul>
+      <button class="primary-btn plan-action" type="button" data-plan-id="${plan.id}" ${isCurrent || plan.id === 'free' ? 'disabled' : ''}>${actionText}</button>
+      ${plan.id === 'free' ? '' : '<p class="plan-note">Demo only. No payment is collected and paid benefits are simulated.</p>'}
+    `;
+    const actionBtn = card.querySelector('[data-plan-id]');
+    if (actionBtn && plan.id !== 'free' && !isCurrent) {
+      actionBtn.addEventListener('click', async () => {
+        if (!state.currentUser || state.currentUser.id === 'usr_guest') {
+          openAuthModal('Sign in to activate a demo plan.');
+          return;
+        }
+        await window.hubDB.setSubscription(state.currentUser.id, plan.id);
+        if (state.isApiConnected) {
+          apiRequest('/api/subscription/checkout', { method: 'POST', body: JSON.stringify({ planId: plan.id }) }).catch(() => {});
+        }
+        notify(`🎉 ${plan.name} demo plan activated!`, 'success');
+        await refreshSubscription();
+        await renderPlans();
+      });
+    }
+    grid.appendChild(card);
+  });
+}
 
 // ================= 3. TOAST NOTIFICATIONS =================
 function notify(msg, type = 'info') {
@@ -416,6 +534,14 @@ async function loadAndPlay(index = state.currentTrackIndex, auto = true) {
   audio.playbackRate = state.playbackRate;
 
   updatePlayerUI(track);
+
+  // Record into listening history
+  if (state.currentUser) {
+    window.hubDB.addHistory(state.currentUser.id, track).catch(() => {});
+    if (state.isApiConnected) {
+      apiRequest('/api/history', { method: 'POST', body: JSON.stringify({ track }) }).catch(() => {});
+    }
+  }
 
   if (auto) {
     try {
@@ -615,6 +741,7 @@ async function refreshData() {
   state.favorites = await window.hubDB.getFavorites(state.currentUser.id);
   state.downloads = await window.hubDB.getDownloads(state.currentUser.id);
   state.playlists = await window.hubDB.getPlaylists(state.currentUser.id);
+  state.history = await window.hubDB.getHistory(state.currentUser.id);
 
   // Update badges
   const favBadge = document.getElementById('favCountBadge');
@@ -691,6 +818,7 @@ function buildCard(track) {
       <button class="card-fav-btn" title="Like">♡</button>
       <button class="card-dl-btn" title="Download">⬇</button>
       <button class="card-pl-btn" title="Add to Playlist">＋</button>
+      <button class="card-share-btn" title="Send to Friends (Instagram DM)">✈</button>
     </div>
   `;
 
@@ -735,6 +863,10 @@ function buildCard(track) {
     e.stopPropagation();
     openAddToPlModal(track);
   };
+  card.querySelector('.card-share-btn').onclick = (e) => {
+    e.stopPropagation();
+    openShareModal(track);
+  };
 
   return card;
 }
@@ -756,6 +888,7 @@ function buildRow(track, index = 0, isQueue = false) {
       <button class="row-fav-btn" title="Like">♡</button>
       <button class="row-dl-btn" title="Download">⬇</button>
       <button class="row-pl-btn" title="Add to Playlist">＋</button>
+      <button class="row-share-btn" title="Send to Friends (Instagram DM)">✈</button>
     </div>
   `;
 
@@ -798,6 +931,10 @@ function buildRow(track, index = 0, isQueue = false) {
     e.stopPropagation();
     openAddToPlModal(track);
   };
+  row.querySelector('.row-share-btn').onclick = (e) => {
+    e.stopPropagation();
+    openShareModal(track);
+  };
 
   return row;
 }
@@ -820,6 +957,10 @@ function switchView(viewName) {
   if (viewName === 'library') renderLibrary('all');
   if (viewName === 'favorites') renderFavorites();
   if (viewName === 'downloads') renderDownloads();
+  if (viewName === 'plans') renderPlans();
+  if (viewName === 'messages') renderMessagesView();
+  if (viewName === 'database') renderDatabaseHub();
+  if (viewName === 'admin') renderAdminView();
 }
 
 function renderHomeGrid(filter = state.selectedGenre) {
@@ -905,6 +1046,8 @@ function renderLibrary(tab = 'all') {
     items = state.favorites;
   } else if (tab === 'local') {
     items = state.localFiles;
+  } else if (tab === 'history') {
+    items = (state.history || []).map(h => h.track || h).filter(Boolean);
   } else if (tab === 'playlists') {
     renderPlaylistsInLibrary(list);
     return;
@@ -913,9 +1056,9 @@ function renderLibrary(tab = 'all') {
   if (items.length === 0) {
     list.innerHTML = `
       <div class="empty">
-        <span>▣</span>
-        <h3>No items found in this section</h3>
-        <p>Explore trending songs or download tracks to build your library.</p>
+        <span>${tab === 'history' ? '⌛' : '▣'}</span>
+        <h3>${tab === 'history' ? 'No listening history yet' : 'No items found in this section'}</h3>
+        <p>${tab === 'history' ? 'Play any song to see it in your history.' : 'Explore trending songs or download tracks to build your library.'}</p>
       </div>
     `;
     return;
@@ -1138,6 +1281,7 @@ async function loginSuccess(user, showToast = true) {
   }
 
   await refreshData();
+  await refreshSubscription();
 }
 
 function continueAsGuest(showToast = false) {
@@ -1226,6 +1370,919 @@ function initLocalUpload() {
   }
 }
 
+
+// ================= 14B. KARAOKE LIVE LYRICS VIEWER =================
+const TRACK_LYRICS = {
+  trk_1761152593: [
+    { time: 0, text: "♪ Chuttamalle chuttukuntive... ♪" },
+    { time: 5, text: "Matthuloki dintu vuntive" },
+    { time: 10, text: "Gunde poyye gundeloki vachi cheeruthave" },
+    { time: 17, text: "Naalo nannu daachi petti nuvve ninnu kanti vuntive" },
+    { time: 24, text: "Chuttamalle chuttukuntive... matthuloki dintu vuntive" },
+    { time: 32, text: "Naa chethi gari gaare nuvve... naa kanne choopu nuvve" },
+    { time: 40, text: "♪ Anirudh beats intensifying ♪" },
+    { time: 50, text: "Chuttamalle... Chuttamalle!" }
+  ],
+  trk_1747191476: [
+    { time: 0, text: "♪ All Hail the Tiger! ♪" },
+    { time: 5, text: "Raktham tho raasina charitha idhi" },
+    { time: 11, text: "Bayapade vaadu brathikunte bayapettina vaadu devudura!" },
+    { time: 18, text: "Thala vanchani dhairyam tho nadiche raaju" },
+    { time: 24, text: "The Red Sea knows his name!" },
+    { time: 30, text: "♪ Fear Song - Devara theme roar ♪" },
+    { time: 42, text: "Bhayame thana aayudhamai... Jagathe thana saakshyamai!" }
+  ],
+  trk_1744162427: [
+    { time: 0, text: "♪ Pushpa... Pushparaj! ♪" },
+    { time: 4, text: "Asalu thaggedhe le!" },
+    { time: 9, text: "Pushpa Pushpa Pushpa... Pushparaj!" },
+    { time: 15, text: "Galli nunchi Delhi daaka evadiki thalavanchani peru" },
+    { time: 22, text: "Rajyam nadipisthaadu... Rajugala doralaki thodu!" },
+    { time: 30, text: "♪ Devi Sri Prasad beat drop ♪" },
+    { time: 38, text: "Thaggedhe le! Asalu thaggedhe le!" }
+  ],
+  trk_1594544794: [
+    { time: 0, text: "♪ Komuram Bheemudo... Naatu Naatu! ♪" },
+    { time: 4, text: "Polam gattu dhummulona potlethe gattulaaga" },
+    { time: 10, text: "Naatu Naatu Naatu Naatu... Veera Naatu!" },
+    { time: 16, text: "Gundeladhire chematha chimme oopu choosi dhoosukellu" },
+    { time: 23, text: "Naatu Naatu Naatu Naatu Naatu Koothu!" },
+    { time: 30, text: "♪ Keeravani Academy Award winning groove ♪" }
+  ],
+  trk_1600014695: [
+    { time: 0, text: "♪ Oo Antava Mawa... Oo Oo Antava Mawa ♪" },
+    { time: 5, text: "Mee magavaari theere veru... manasu kante maate veru" },
+    { time: 12, text: "Kallathone choosthaaru... daaham theerchukuntaaru" },
+    { time: 18, text: "Oo Antava Mawa... Oo Oo Antava Mawa!" },
+    { time: 26, text: "Thappante thappelaa avuthundi... thappe meeru chesthunte!" }
+  ],
+  trk_1723602835: [
+    { time: 0, text: "♪ Kurchi Madathapetti... Kurchi Madathapetti! ♪" },
+    { time: 4, text: "Thaman beats on fire! 🔥" },
+    { time: 8, text: "Maava... hey maava!" },
+    { time: 14, text: "Kurchi Madathapetti danchudu shuru chesthe" },
+    { time: 20, text: "Mass step-lu pettesthaam guntur kaaram tho!" }
+  ],
+  trk_1542842761: [
+    { time: 0, text: "♪ Synthesizer intro ♪" },
+    { time: 4, text: "Yeah..." },
+    { time: 8, text: "I've been on my own for long enough" },
+    { time: 13, text: "Maybe you can show me how to love, maybe" },
+    { time: 18, text: "I look around and Sin City's cold and empty" },
+    { time: 24, text: "No one's around to judge me" },
+    { time: 28, text: "I can't see clearly when you're gone" },
+    { time: 33, text: "I said, ooh, I'm blinded by the lights!" }
+  ]
+};
+
+function getTrackLyrics(track) {
+  if (!track) return [];
+  if (TRACK_LYRICS[track.id]) return TRACK_LYRICS[track.id];
+  return [
+    { time: 0, text: `♪ Listening to "${track.title}" ♪` },
+    { time: 4, text: `Artist: ${track.artist}` },
+    { time: 9, text: `Album: ${track.album || 'Single'}` },
+    { time: 14, text: "♪ Feel the melodic rhythm and harmony ♪" },
+    { time: 20, text: "Sing along and vibe to this high-fidelity audio stream 🎧" },
+    { time: 28, text: "♪ Beat crescendo & baseline ♪" },
+    { time: 36, text: `Enjoying ${track.title} on Audio Streamer Hub!` }
+  ];
+}
+
+function openLyricsModal() {
+  const modal = document.getElementById('lyricsModal');
+  const title = document.getElementById('lyricsTrackTitle');
+  const artist = document.getElementById('lyricsTrackArtist');
+  const container = document.getElementById('lyricsContent');
+  if (!modal || !container) return;
+
+  const track = state.currentTrack;
+  if (title) title.textContent = track.title;
+  if (artist) artist.textContent = track.artist;
+
+  container.innerHTML = '';
+  const lyrics = getTrackLyrics(track);
+
+  lyrics.forEach((item, index) => {
+    const line = document.createElement('div');
+    line.className = 'lyrics-line';
+    line.dataset.time = item.time;
+    line.dataset.index = index;
+    line.textContent = item.text;
+    line.onclick = () => {
+      audio.currentTime = item.time;
+      syncLyricsLine(item.time);
+    };
+    container.appendChild(line);
+  });
+
+  modal.classList.remove('hidden');
+  syncLyricsLine(audio.currentTime);
+}
+
+function closeLyricsModal() {
+  const modal = document.getElementById('lyricsModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function syncLyricsLine(currentTime) {
+  const container = document.getElementById('lyricsContent');
+  if (!container || document.getElementById('lyricsModal')?.classList.contains('hidden')) return;
+
+  const lines = container.querySelectorAll('.lyrics-line');
+  if (!lines.length) return;
+
+  let activeIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const t = parseFloat(lines[i].dataset.time);
+    if (currentTime >= t) {
+      activeIndex = i;
+    } else {
+      break;
+    }
+  }
+
+  lines.forEach((l, idx) => {
+    if (idx === activeIndex) {
+      l.classList.add('active');
+      l.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      l.classList.remove('active');
+    }
+  });
+}
+
+// ================= 14C. SLEEP TIMER CONTROLLER =================
+function openTimerModal() {
+  const modal = document.getElementById('timerModal');
+  if (!modal) return;
+  updateTimerModalUI();
+  modal.classList.remove('hidden');
+}
+
+function closeTimerModal() {
+  const modal = document.getElementById('timerModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function setSleepTimer(minutes) {
+  cancelSleepTimer(false);
+
+  const timerBtn = document.getElementById('sleepTimerBtn');
+
+  if (minutes === 'end') {
+    state.sleepTimerToEndOfTrack = true;
+    state.sleepTimerEnd = null;
+    notify('Sleep Timer set: Will pause when current track ends 🌙', 'success');
+    if (timerBtn) {
+      timerBtn.classList.add('active');
+      timerBtn.title = 'Sleep Timer: End of Track';
+    }
+  } else {
+    state.sleepTimerToEndOfTrack = false;
+    const mins = parseInt(minutes, 10);
+    state.sleepTimerEnd = Date.now() + (mins * 60 * 1000);
+
+    notify(`Sleep Timer set: Music will pause in ${mins} minutes 🌙`, 'success');
+    if (timerBtn) {
+      timerBtn.classList.add('active');
+      timerBtn.title = `Sleep Timer: ${mins}m active`;
+    }
+
+    state.sleepTimerId = setInterval(() => {
+      const remaining = state.sleepTimerEnd - Date.now();
+      if (remaining <= 0) {
+        cancelSleepTimer(false);
+        audio.pause();
+        state.isPlaying = false;
+        updatePlayBtn();
+        notify('Sleep timer reached: Music stopped to let you rest 🌙', 'info');
+      } else {
+        updateTimerCountdownDisplay(remaining);
+      }
+    }, 1000);
+  }
+
+  updateTimerModalUI();
+  setTimeout(closeTimerModal, 600);
+}
+
+function cancelSleepTimer(showToast = true) {
+  if (state.sleepTimerId) {
+    clearInterval(state.sleepTimerId);
+    state.sleepTimerId = null;
+  }
+  state.sleepTimerEnd = null;
+  state.sleepTimerToEndOfTrack = false;
+
+  const timerBtn = document.getElementById('sleepTimerBtn');
+  if (timerBtn) {
+    timerBtn.classList.remove('active');
+    timerBtn.title = 'Sleep Timer';
+  }
+
+  const box = document.getElementById('timerCountdownBox');
+  if (box) box.classList.add('hidden');
+
+  if (showToast) notify('Sleep Timer turned off', 'info');
+  updateTimerModalUI();
+}
+
+function updateTimerModalUI() {
+  const box = document.getElementById('timerCountdownBox');
+  const disp = document.getElementById('timerCountdownDisplay');
+  if (!box || !disp) return;
+
+  if (state.sleepTimerToEndOfTrack) {
+    box.classList.remove('hidden');
+    disp.textContent = 'End of Track';
+  } else if (state.sleepTimerEnd) {
+    box.classList.remove('hidden');
+    const remaining = Math.max(0, state.sleepTimerEnd - Date.now());
+    updateTimerCountdownDisplay(remaining);
+  } else {
+    box.classList.add('hidden');
+  }
+}
+
+function updateTimerCountdownDisplay(ms) {
+  const disp = document.getElementById('timerCountdownDisplay');
+  if (!disp) return;
+  const totalSecs = Math.floor(ms / 1000);
+  const m = Math.floor(totalSecs / 60);
+  const s = totalSecs % 60;
+  disp.textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+// ================= 14D. INSTAGRAM DIRECT SHARE SHEET =================
+function openShareModal(track = null) {
+  const modal = document.getElementById('shareModal');
+  if (!modal) return;
+
+  const targetTrack = track || state.currentTrack;
+  state.sharingTrack = targetTrack;
+
+  const artEl = document.getElementById('shareSongArt');
+  const titleEl = document.getElementById('shareSongTitle');
+  const artistEl = document.getElementById('shareSongArtist');
+  const noteInput = document.getElementById('shareNoteInput');
+  const previewPlayBtn = document.getElementById('shareSongPlayBtn');
+
+  if (artEl) {
+    artEl.innerHTML = targetTrack.cover
+      ? `<img src="${targetTrack.cover}" alt="${targetTrack.title}" style="width:100%; height:100%; object-fit:cover; border-radius:8px;">`
+      : '♫';
+  }
+  if (titleEl) titleEl.textContent = targetTrack.title;
+  if (artistEl) artistEl.textContent = targetTrack.artist;
+  if (noteInput) noteInput.value = '';
+
+  if (previewPlayBtn) {
+    previewPlayBtn.onclick = () => {
+      playSharedTrack(targetTrack);
+      closeShareModal();
+    };
+  }
+
+  // Populate Friends list in Share Sheet
+  renderShareSheetFriends();
+
+  // External share buttons
+  const copyBtn = document.getElementById('copyShareLinkBtn');
+  const waBtn = document.getElementById('waShareBtn');
+  const igBtn = document.getElementById('instaShareBtn');
+
+  const shareUrl = `${window.location.origin}${window.location.pathname}#track=${encodeURIComponent(targetTrack.id)}`;
+
+  if (copyBtn) {
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        notify('Song link copied to clipboard! 🔗', 'success');
+      }).catch(() => {
+        notify(`Link: ${shareUrl}`, 'info');
+      });
+    };
+  }
+
+  if (waBtn) {
+    waBtn.onclick = () => {
+      const text = encodeURIComponent(`Listen to "${targetTrack.title}" by ${targetTrack.artist} on Audio Streamer Hub 🎵\n${shareUrl}`);
+      window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+    };
+  }
+
+  if (igBtn) {
+    igBtn.onclick = () => {
+      navigator.clipboard.writeText(`Vibing to "${targetTrack.title}" on Audio Streamer Hub 🎵 ${shareUrl}`);
+      notify('Link copied! Open Instagram DM and paste to send to your friend 📸', 'success');
+      window.open('https://www.instagram.com/direct/inbox/', '_blank');
+    };
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeShareModal() {
+  const modal = document.getElementById('shareModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function renderShareSheetFriends() {
+  const container = document.getElementById('shareFriendsList');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const friends = window.hubDB.getFriends();
+  friends.forEach(friend => {
+    const item = document.createElement('div');
+    item.className = 'share-friend-card';
+    item.innerHTML = `
+      <div class="share-friend-left">
+        <span class="share-friend-avatar">${friend.avatar || '🎧'}</span>
+        <div>
+          <strong class="share-friend-name">${friend.name}</strong>
+          <span class="share-friend-handle">${friend.handle}</span>
+        </div>
+      </div>
+      <button class="primary-btn sm-pill share-send-btn">Send ✈</button>
+    `;
+
+    item.querySelector('.share-send-btn').onclick = async () => {
+      const noteInput = document.getElementById('shareNoteInput');
+      const note = noteInput ? noteInput.value.trim() : '';
+      await sendSongToFriend(friend, state.sharingTrack, note);
+    };
+
+    container.appendChild(item);
+  });
+}
+
+async function sendSongToFriend(friend, track, note = '') {
+  if (!track) return;
+  const currentUserId = state.currentUser ? state.currentUser.id : 'usr_demo_chaithanya';
+  const messageText = note ? `${note} 🎵` : `Check out this song: "${track.title}"! 🎧`;
+
+  // Save to database / local store
+  await window.hubDB.sendMessage(currentUserId, friend.id, messageText, track);
+
+  // If Express API is running, send over server too
+  if (state.isApiConnected) {
+    try {
+      await apiRequest(`/api/messages/${friend.id}`, {
+        method: 'POST',
+        body: JSON.stringify({ text: messageText, track })
+      });
+    } catch (_e) {}
+  }
+
+  notify(`Sent "${track.title}" to ${friend.name}! ✈`, 'success');
+  closeShareModal();
+
+  // If user is currently looking at messages view, refresh
+  if (state.currentView === 'messages') {
+    state.activeFriendId = friend.id;
+    renderMessagesView();
+  }
+}
+
+// ================= 14E. DIRECT MESSAGING & FRIENDS HUB =================
+let simulatedReplyTimer = null;
+
+async function renderMessagesView() {
+  const friendsList = document.getElementById('friendsList');
+  if (!friendsList) return;
+
+  const currentUserId = state.currentUser ? state.currentUser.id : 'usr_demo_chaithanya';
+  const friends = window.hubDB.getFriends();
+  const searchFilter = (document.getElementById('friendSearchInput')?.value || '').toLowerCase().trim();
+
+  friendsList.innerHTML = '';
+
+  const filteredFriends = friends.filter(f => 
+    !searchFilter || f.name.toLowerCase().includes(searchFilter) || f.handle.toLowerCase().includes(searchFilter)
+  );
+
+  if (filteredFriends.length === 0) {
+    friendsList.innerHTML = `<p style="padding:16px; color:var(--muted); font-size:13px;">No friends found matching "${searchFilter}".</p>`;
+  } else {
+    for (const friend of filteredFriends) {
+      const msgs = await window.hubDB.getMessages(currentUserId, friend.id);
+      const lastMsg = msgs.length ? msgs[msgs.length - 1] : null;
+      const previewText = lastMsg ? (lastMsg.track ? `🎵 ${lastMsg.track.title}` : lastMsg.text) : friend.status;
+
+      const item = document.createElement('div');
+      item.className = `friend-item ${state.activeFriendId === friend.id ? 'active' : ''}`;
+      item.innerHTML = `
+        <div class="friend-avatar-wrap">
+          <span class="friend-avatar">${friend.avatar}</span>
+          <span class="friend-online-dot ${friend.online ? 'online' : ''}"></span>
+        </div>
+        <div class="friend-info">
+          <div class="friend-top-row">
+            <strong>${friend.name}</strong>
+            <span class="friend-time">${lastMsg ? (lastMsg.time || '') : ''}</span>
+          </div>
+          <p class="friend-last-msg">${previewText}</p>
+        </div>
+      `;
+
+      item.onclick = () => {
+        state.activeFriendId = friend.id;
+        renderMessagesView();
+      };
+
+      friendsList.appendChild(item);
+    }
+  }
+
+  // Render active conversation thread
+  await renderChatThread();
+}
+
+async function renderChatThread() {
+  const currentUserId = state.currentUser ? state.currentUser.id : 'usr_demo_chaithanya';
+  const friends = window.hubDB.getFriends();
+  const activeFriend = friends.find(f => f.id === state.activeFriendId) || friends[0];
+  state.activeFriendId = activeFriend.id;
+
+  const avatarEl = document.getElementById('chatActiveAvatar');
+  const nameEl = document.getElementById('chatActiveName');
+  const statusEl = document.getElementById('chatActiveStatus');
+  const container = document.getElementById('chatMessages');
+
+  if (avatarEl) avatarEl.textContent = activeFriend.avatar;
+  if (nameEl) nameEl.textContent = activeFriend.name;
+  if (statusEl) {
+    statusEl.innerHTML = activeFriend.online
+      ? `🟢 Online • ${activeFriend.status}`
+      : `⚪ Offline • ${activeFriend.status}`;
+  }
+
+  if (!container) return;
+  container.innerHTML = '';
+
+  let messages = await window.hubDB.getMessages(currentUserId, activeFriend.id);
+  if (state.isApiConnected) {
+    try {
+      const res = await apiRequest(`/api/messages/${activeFriend.id}`);
+      if (res && res.messages && res.messages.length) {
+        messages = res.messages;
+      }
+    } catch (_e) {}
+  }
+
+  if (messages.length === 0) {
+    container.innerHTML = `
+      <div class="empty" style="padding:40px 16px;">
+        <span style="font-size:32px;">💬</span>
+        <h3>Say hello to ${activeFriend.name}!</h3>
+        <p>Send a message or share a Telugu chartbuster song directly into this chat.</p>
+      </div>
+    `;
+    return;
+  }
+
+  messages.forEach(msg => {
+    const isUser = msg.sender === 'user';
+    const bubble = document.createElement('div');
+    bubble.className = `chat-bubble-row ${isUser ? 'sent' : 'received'}`;
+
+    let songCardHtml = '';
+    if (msg.track) {
+      songCardHtml = `
+        <div class="chat-song-card" data-track-id="${msg.track.id}">
+          <div class="chat-song-thumb">
+            ${msg.track.cover ? `<img src="${msg.track.cover}" alt="${msg.track.title}">` : '♫'}
+          </div>
+          <div class="chat-song-info">
+            <div class="chat-song-title">${msg.track.title}</div>
+            <div class="chat-song-artist">${msg.track.artist}</div>
+          </div>
+          <button class="primary-btn sm-pill chat-song-play-btn" title="Play shared track">▶ Play</button>
+        </div>
+      `;
+    }
+
+    bubble.innerHTML = `
+      <div class="chat-bubble ${isUser ? 'user-bubble' : 'friend-bubble'}">
+        ${msg.text ? `<p class="chat-bubble-text">${escapeHtml(msg.text)}</p>` : ''}
+        ${songCardHtml}
+        <span class="chat-bubble-time">${msg.time || ''}</span>
+      </div>
+    `;
+
+    // Hook play button if song card present
+    const playBtn = bubble.querySelector('.chat-song-play-btn');
+    if (playBtn && msg.track) {
+      playBtn.onclick = () => playSharedTrack(msg.track);
+    }
+
+    container.appendChild(bubble);
+  });
+
+  // Scroll to bottom
+  container.scrollTop = container.scrollHeight;
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/[&<>"']/g, m => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+  })[m]);
+}
+
+function playSharedTrack(track) {
+  if (!track) return;
+  let idx = state.queue.findIndex(t => t.id === track.id || (t.title === track.title && t.artist === track.artist));
+  if (idx === -1) {
+    state.queue.unshift(track);
+    idx = 0;
+  }
+  loadAndPlay(idx, true);
+  notify(`Now Playing shared song: "${track.title}"! 🎵`, 'success');
+}
+
+async function sendChatMessageFromInput(e) {
+  if (e) e.preventDefault();
+  const input = document.getElementById('chatInput');
+  if (!input) return;
+
+  const text = input.value.trim();
+  const attachedTrack = state.chatAttachedTrack;
+
+  if (!text && !attachedTrack) return;
+
+  const currentUserId = state.currentUser ? state.currentUser.id : 'usr_demo_chaithanya';
+  const friendId = state.activeFriendId || 'fr_1';
+
+  input.value = '';
+  state.chatAttachedTrack = null;
+  updateChatAttachBtnUI();
+
+  // Send message
+  await window.hubDB.sendMessage(currentUserId, friendId, text, attachedTrack);
+
+  if (state.isApiConnected) {
+    try {
+      await apiRequest(`/api/messages/${friendId}`, {
+        method: 'POST',
+        body: JSON.stringify({ text, track: attachedTrack })
+      });
+    } catch (_e) {}
+  }
+
+  await renderChatThread();
+  renderMessagesView();
+
+  // Friendly simulated reply after 1.5s for authentic Instagram DM experience
+  clearTimeout(simulatedReplyTimer);
+  simulatedReplyTimer = setTimeout(async () => {
+    const friend = window.hubDB.getFriends().find(f => f.id === friendId);
+    if (!friend) return;
+
+    let replyText = "Love this track! 🔥 Listening to it right now!";
+    if (attachedTrack) {
+      replyText = `Whoa "${attachedTrack.title}" is so good! Added it to my playlist right now 🎧`;
+    } else if (text.toLowerCase().includes('devara') || text.toLowerCase().includes('anirudh')) {
+      replyText = "Anirudh's bgm in Devara is pure goosebumps! 🔥";
+    } else if (text.toLowerCase().includes('hi') || text.toLowerCase().includes('hey')) {
+      replyText = "Hey bro! What song are you vibing to today?";
+    }
+
+    const replyMsg = {
+      id: 'm_reply_' + Date.now(),
+      sender: 'friend',
+      text: replyText,
+      track: null,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: Date.now()
+    };
+
+    const key = `chat_${currentUserId}_${friendId}`;
+    const msgs = await window.hubDB.getMessages(currentUserId, friendId);
+    msgs.push(replyMsg);
+    window.hubDB._setLS(key, msgs);
+
+    if (state.currentView === 'messages' && state.activeFriendId === friendId) {
+      await renderChatThread();
+      notify(`${friend.name} replied in chat! 💬`, 'info');
+    }
+  }, 1600);
+}
+
+function toggleChatAttachSong() {
+  const current = state.currentTrack;
+  if (!current) return;
+
+  if (state.chatAttachedTrack) {
+    state.chatAttachedTrack = null;
+    notify('Song detached from message', 'info');
+  } else {
+    state.chatAttachedTrack = current;
+    notify(`Attached "${current.title}" to message! 🎵`, 'success');
+  }
+  updateChatAttachBtnUI();
+}
+
+function updateChatAttachBtnUI() {
+  const btn = document.getElementById('chatAttachSongBtn');
+  const input = document.getElementById('chatInput');
+  if (!btn) return;
+
+  if (state.chatAttachedTrack) {
+    btn.classList.add('active');
+    btn.textContent = '✓ Attached';
+    if (input && !input.value) {
+      input.placeholder = `Sharing: "${state.chatAttachedTrack.title}"... Type a note!`;
+    }
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = '🎵';
+    if (input) input.placeholder = 'Message friend or send song...';
+  }
+}
+
+// ================= 14F. DATABASE & ACCOUNT MANAGEMENT HUB =================
+async function renderDatabaseHub() {
+  const currentUserId = state.currentUser ? state.currentUser.id : 'usr_demo_chaithanya';
+  const diag = await window.hubDB.getDatabaseDiagnostics(currentUserId);
+
+  let serverDiag = null;
+  if (state.isApiConnected) {
+    try {
+      const res = await apiRequest('/api/database/diagnostics');
+      if (res && res.diagnostics) serverDiag = res.diagnostics;
+    } catch (_e) {}
+  }
+
+  // Update hero badges
+  const engineTitle = document.getElementById('dbEngineTitle');
+  const engineDesc = document.getElementById('dbEngineDesc');
+  const engineIcon = document.getElementById('dbEngineIcon');
+
+  if (serverDiag && serverDiag.engine === 'MySQL 8.0') {
+    if (engineTitle) engineTitle.textContent = 'MySQL 8.0 Active (Full Relational Database)';
+    if (engineIcon) engineIcon.textContent = '🟢';
+    if (engineDesc) engineDesc.textContent = 'Node.js Express server is connected to MySQL 8.0 with tables for users, favorites, downloads, playlists, and history.';
+  } else {
+    if (engineTitle) engineTitle.textContent = 'Dual-Engine Active: Resilient LocalDB (IndexedDB & Cache)';
+    if (engineIcon) engineIcon.textContent = '🟢';
+    if (engineDesc) engineDesc.textContent = 'Persistent browser IndexedDB + LocalStorage is active. All songs, audio blobs, chat messages, and user sessions are stored reliably.';
+  }
+
+  // Update KPI counters
+  const user = state.currentUser;
+  const statUser = document.getElementById('statUserId');
+  const statEmail = document.getElementById('statUserEmail');
+  const statFav = document.getElementById('statFavCount');
+  const statDl = document.getElementById('statDlCount');
+  const statDlSize = document.getElementById('statDlSize');
+  const statPl = document.getElementById('statPlCount');
+  const statHistory = document.getElementById('statHistoryCount');
+  const statMsg = document.getElementById('statMsgCount');
+
+  if (statUser) statUser.textContent = user ? user.username : 'Chaithanya (Demo)';
+  if (statEmail) statEmail.textContent = user ? user.email : 'demo@hub.com';
+  if (statFav) statFav.textContent = diag.favoritesCount;
+  if (statDl) statDl.textContent = diag.downloadsCount;
+  if (statDlSize) statDlSize.textContent = `${diag.storageUsedMb} MB offline audio stored`;
+  if (statPl) statPl.textContent = diag.playlistsCount;
+  if (statHistory) statHistory.textContent = diag.historyCount;
+
+  // Compute friend message count
+  let totalMsgs = 0;
+  const friends = window.hubDB.getFriends();
+  for (const f of friends) {
+    const msgs = await window.hubDB.getMessages(currentUserId, f.id);
+    totalMsgs += msgs.length;
+  }
+  if (statMsg) statMsg.textContent = totalMsgs;
+}
+
+async function exportDatabaseBackup() {
+  const currentUserId = state.currentUser ? state.currentUser.id : 'usr_demo_chaithanya';
+  const jsonStr = await window.hubDB.exportDatabaseBackup(currentUserId);
+
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `AudioStreamerHub_Database_Backup_${Date.now()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  notify('Database backup downloaded successfully! 💾', 'success');
+}
+
+async function clearDatabaseCacheAction() {
+  if (confirm('Clear local database cache and reset demo data? Your user account will stay intact.')) {
+    const currentUserId = state.currentUser ? state.currentUser.id : 'usr_demo_chaithanya';
+    await window.hubDB.clearDatabaseCache(currentUserId);
+    notify('Database cache cleared & refreshed! 🧹', 'info');
+    await refreshData();
+    await renderDatabaseHub();
+  }
+}
+
+
+// ================= 14G. ADMIN STUDIO & CATALOG MANAGEMENT =================
+const DEFAULT_CATALOG = [...TRACKS];
+
+async function loadCustomCatalogTracks() {
+  const localCustom = window.hubDB.getCustomTracks();
+  let serverCustom = [];
+
+  if (state.isApiConnected) {
+    try {
+      const res = await apiRequest('/api/admin/tracks');
+      if (res && res.tracks) serverCustom = res.tracks;
+    } catch (_e) {}
+  }
+
+  // Merge custom tracks without duplicates
+  const mergedMap = new Map();
+  [...serverCustom, ...localCustom].forEach(t => mergedMap.set(t.id, t));
+  const customList = Array.from(mergedMap.values());
+
+  // Reset TRACKS to defaults then prepend custom
+  TRACKS = [...customList, ...DEFAULT_CATALOG];
+  state.queue = [...TRACKS];
+
+  // Register any custom lyrics into TRACK_LYRICS
+  customList.forEach(t => {
+    if (t.lyrics && typeof t.lyrics === 'string') {
+      const lines = t.lyrics.split('\n').map((l, i) => ({ time: i * 5, text: l.trim() })).filter(l => l.text);
+      if (lines.length) TRACK_LYRICS[t.id] = lines;
+    }
+  });
+}
+
+function renderAdminView() {
+  const countEl = document.getElementById('adminCatalogCount');
+  const tableBody = document.getElementById('adminCatalogTableBody');
+  const filterVal = (document.getElementById('adminCatalogSearch')?.value || '').toLowerCase().trim();
+
+  if (countEl) countEl.textContent = `Total ${TRACKS.length} songs active in catalog (${TRACKS.filter(t => t.isCustom).length} custom admin added)`;
+  if (!tableBody) return;
+  tableBody.innerHTML = '';
+
+  const filtered = TRACKS.filter(t =>
+    !filterVal ||
+    t.title.toLowerCase().includes(filterVal) ||
+    t.artist.toLowerCase().includes(filterVal) ||
+    (t.album && t.album.toLowerCase().includes(filterVal))
+  );
+
+  if (filtered.length === 0) {
+    tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:var(--muted);">No songs match "${escapeHtml(filterVal)}".</td></tr>`;
+    return;
+  }
+
+  filtered.forEach(t => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <img src="${t.cover || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300'}" alt="${escapeHtml(t.title)}" style="width:38px; height:38px; border-radius:6px; object-fit:cover;">
+          <strong>${escapeHtml(t.title)}</strong>
+        </div>
+      </td>
+      <td>${escapeHtml(t.artist)} • <small style="color:var(--muted);">${escapeHtml(t.album || 'Single')}</small></td>
+      <td><span style="text-transform:capitalize;">${escapeHtml(t.genre || 'all')}</span></td>
+      <td>${formatTime(t.duration || 210)}</td>
+      <td>
+        <span class="${t.isCustom ? 'badge-custom' : 'badge-curated'}">
+          ${t.isCustom ? '★ Admin Added' : 'Curated Hit'}
+        </span>
+      </td>
+      <td>
+        <div style="display:flex; gap:6px;">
+          <button class="primary-btn sm-pill admin-play-btn" title="Preview track">▶ Play</button>
+          ${t.isCustom ? `<button class="secondary-btn sm-pill danger admin-del-btn" title="Delete custom song">🗑</button>` : ''}
+        </div>
+      </td>
+    `;
+
+    tr.querySelector('.admin-play-btn').onclick = () => {
+      let idx = state.queue.findIndex(q => q.id === t.id);
+      if (idx === -1) {
+        state.queue.unshift(t);
+        idx = 0;
+      }
+      loadAndPlay(idx, true);
+      notify(`Previewing "${t.title}"! 🎵`, 'success');
+    };
+
+    const delBtn = tr.querySelector('.admin-del-btn');
+    if (delBtn) {
+      delBtn.onclick = async () => {
+        if (confirm(`Remove "${t.title}" from the catalog?`)) {
+          await deleteAdminTrack(t.id);
+        }
+      };
+    }
+
+    tableBody.appendChild(tr);
+  });
+}
+
+async function deleteAdminTrack(trackId) {
+  window.hubDB.deleteCustomTrack(trackId);
+  if (state.isApiConnected) {
+    try {
+      await apiRequest(`/api/admin/tracks/${trackId}`, { method: 'DELETE' });
+    } catch (_e) {}
+  }
+
+  TRACKS = TRACKS.filter(t => t.id !== trackId);
+  state.queue = state.queue.filter(t => t.id !== trackId);
+
+  notify('Song removed from catalog', 'info');
+  renderAdminView();
+  renderHomeGrid();
+}
+
+// Sample Telugu Blockbusters for 1-Click addition
+const SAMPLE_TELUGU_HITS = [
+  {
+    id: "custom_gamechanger_1",
+    title: "Raa Macha Macha (From \"Game Changer\")",
+    artist: "Thaman S & Nakash Aziz",
+    album: "Game Changer",
+    duration: 218,
+    genre: "telugu",
+    cover: "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/86/7c/53/867c53cc-4efe-faef-a20e-8d9c896053db/8903431011411_cover.jpg/600x600bb.jpg",
+    audioSrc: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/01/85/b5/0185b5d0-9eb2-7be4-4325-fd3634fbc40b/mzaf_2467991545485613534.plus.aac.p.m4a",
+    lyrics: "Raa Macha Macha... Thaman mass beat shuru!\nAndariki thalavanchani speed tho...\nRaa Macha Macha Game Changer!",
+    isCustom: true
+  },
+  {
+    id: "custom_pushpa2_couple",
+    title: "Sooseki - The Couple Song (From \"Pushpa 2\")",
+    artist: "Shreya Ghoshal & Devi Sri Prasad",
+    album: "Pushpa 2 The Rule",
+    duration: 260,
+    genre: "telugu",
+    cover: "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/8b/dd/7f/8bdd7fa9-d6f2-2230-5e7a-3c2fe8b5fbfb/8903431993601_cover.jpg/600x600bb.jpg",
+    audioSrc: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/f9/28/29/f92829b4-5473-17a9-879a-2efe96b8f95b/mzaf_4766756883763132198.plus.aac.p.m4a",
+    lyrics: "Sooseki choodu mawa...\nPushpa and Srivalli magic!\n♪ DSP soulful romantic rhythm ♪",
+    isCustom: true
+  },
+  {
+    id: "custom_saripodhaa_1",
+    title: "Garam Garam (From \"Saripodhaa Sanivaaram\")",
+    artist: "Jakes Bejoy & Vishal Dadlani",
+    album: "Saripodhaa Sanivaaram",
+    duration: 198,
+    genre: "telugu",
+    cover: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80",
+    audioSrc: "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=summer-walk-111105.mp3",
+    lyrics: "Garam Garam Sanivaaram!\nNani mass avatar in full fury!\nJakes Bejoy electrifying bgm!",
+    isCustom: true
+  },
+  {
+    id: "custom_og_firestorm",
+    title: "Fire Storm (From \"They Call Him OG\")",
+    artist: "Thaman S",
+    album: "OG",
+    duration: 180,
+    genre: "telugu",
+    cover: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80",
+    audioSrc: "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/8d/b1/16/8db11650-580e-ab11-9747-b7bb8544ce55/mzaf_14247929829726939234.plus.aac.p.m4a",
+    lyrics: "Fire Storm is coming!\nThey Call Him OG!\n♪ Pure rampage theme ♪",
+    isCustom: true
+  }
+];
+
+async function quickAddSampleTeluguHits() {
+  for (const t of SAMPLE_TELUGU_HITS) {
+    window.hubDB.addCustomTrack(t);
+    if (!TRACKS.some(exist => exist.id === t.id)) {
+      TRACKS.unshift(t);
+    }
+    if (state.isApiConnected) {
+      apiRequest('/api/admin/tracks', { method: 'POST', body: JSON.stringify(t) }).catch(() => {});
+    }
+  }
+  state.queue = [...TRACKS];
+  notify('Added 4 blockbuster Telugu tracks to Catalog! 🔥', 'success');
+  renderAdminView();
+  renderHomeGrid();
+}
+
+function resetCustomCatalog() {
+  if (confirm('Reset custom songs back to the default curated catalog?')) {
+    window.hubDB.clearCustomTracks();
+    TRACKS = [...DEFAULT_CATALOG];
+    state.queue = [...TRACKS];
+    notify('Custom songs reset to default catalog', 'info');
+    renderAdminView();
+    renderHomeGrid();
+  }
+}
+
 // ================= 15. ATTACH EVENT HANDLERS =================
 function setupHandlers() {
   // Navigation
@@ -1273,6 +2330,7 @@ function setupHandlers() {
     prog.value = pct;
     curTime.textContent = formatTime(audio.currentTime);
     durTime.textContent = formatTime(audio.duration);
+    if (typeof syncLyricsLine === 'function') syncLyricsLine(audio.currentTime);
   };
 
   prog.oninput = (e) => {
@@ -1281,6 +2339,14 @@ function setupHandlers() {
   };
 
   audio.onended = () => {
+    if (state.sleepTimerToEndOfTrack) {
+      audio.pause();
+      state.isPlaying = false;
+      updatePlayBtn();
+      cancelSleepTimer(false);
+      notify('Sleep timer reached: Track finished, pausing playback 🌙', 'info');
+      return;
+    }
     if (state.repeatMode === 'one') {
       audio.currentTime = 0;
       audio.play();
@@ -1521,20 +2587,27 @@ function setupHandlers() {
       const passField = document.getElementById('loginPassword');
       if (emailField) emailField.value = 'demo@hub.com';
       if (passField) passField.value = 'password123';
-      try {
-        const u = await window.hubDB.loginUser('demo@hub.com', 'password123');
-        await loginSuccess(u, true);
-      } catch (errObj) {
+      notify('Logging into Demo Account...', 'info');
+      let user = null;
+      if (state.isApiConnected) {
         try {
-          const u = await window.hubDB.registerUser('Chaithanya (Demo)', 'demo@hub.com', 'password123', '🎧');
-          await loginSuccess(u, true);
-        } catch (e) {
-          const errL = document.getElementById('loginError');
-          if (errL) {
-            errL.textContent = e.message;
-            errL.classList.remove('hidden');
-          }
+          const res = await apiRequest('/api/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ email: 'demo@hub.com', password: 'password123' })
+          });
+          if (res?.user) user = res.user;
+        } catch (_e) {}
+      }
+      if (!user) {
+        try {
+          user = await window.hubDB.loginUser('demo@hub.com', 'password123');
+        } catch (_err) {
+          user = await window.hubDB.registerUser('Chaithanya (Demo)', 'demo@hub.com', 'password123', '🎧');
         }
+      }
+      if (user) {
+        window.hubDB.setCurrentSession(user);
+        await loginSuccess(user, true);
       }
     };
   }
@@ -1543,32 +2616,68 @@ function setupHandlers() {
   formLogin.onsubmit = async (e) => {
     e.preventDefault();
     clearAuthErrors();
-    const em = document.getElementById('loginEmail').value;
-    const pw = document.getElementById('loginPassword').value;
+    const em = document.getElementById('loginEmail').value.trim();
+    const pw = document.getElementById('loginPassword').value.trim();
     const err = document.getElementById('loginError');
-    try {
-      const u = await window.hubDB.loginUser(em, pw);
-      loginSuccess(u, true);
-    } catch (errObj) {
-      err.textContent = errObj.message;
-      err.classList.remove('hidden');
+    let user = null;
+    if (state.isApiConnected) {
+      try {
+        const res = await apiRequest('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email: em, password: pw })
+        });
+        if (res?.user) user = res.user;
+      } catch (_apiErr) {
+        // Fallback to local DB
+      }
     }
+    if (!user) {
+      try {
+        user = await window.hubDB.loginUser(em, pw);
+      } catch (errObj) {
+        err.textContent = errObj.message;
+        err.classList.remove('hidden');
+        return;
+      }
+    }
+    window.hubDB.setCurrentSession(user);
+    await loginSuccess(user, true);
   };
 
   formSignup.onsubmit = async (e) => {
     e.preventDefault();
     clearAuthErrors();
-    const name = document.getElementById('signupUsername').value;
-    const em = document.getElementById('signupEmail').value;
-    const pw = document.getElementById('signupPassword').value;
+    const name = document.getElementById('signupUsername').value.trim();
+    const em = document.getElementById('signupEmail').value.trim();
+    const pw = document.getElementById('signupPassword').value.trim();
     const err = document.getElementById('signupError');
-    try {
-      const u = await window.hubDB.registerUser(name, em, pw, selectedAvatar);
-      loginSuccess(u, true);
-    } catch (errObj) {
-      err.textContent = errObj.message;
-      err.classList.remove('hidden');
+    let user = null;
+    if (state.isApiConnected) {
+      try {
+        const res = await apiRequest('/api/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({ username: name, email: em, password: pw, avatar: selectedAvatar })
+        });
+        if (res?.user) user = res.user;
+      } catch (apiErr) {
+        if (apiErr.message && !apiErr.message.includes('500') && !apiErr.message.includes('failed')) {
+          err.textContent = apiErr.message;
+          err.classList.remove('hidden');
+          return;
+        }
+      }
     }
+    if (!user) {
+      try {
+        user = await window.hubDB.registerUser(name, em, pw, selectedAvatar);
+      } catch (errObj) {
+        err.textContent = errObj.message;
+        err.classList.remove('hidden');
+        return;
+      }
+    }
+    window.hubDB.setCurrentSession(user);
+    await loginSuccess(user, true);
   };
 
   document.getElementById('guestBtn').onclick = () => continueAsGuest(true);
@@ -1667,6 +2776,101 @@ function setupHandlers() {
     }
   });
 
+  // Cancel plan button
+  const cancelPlanBtn = document.getElementById('cancelPlanBtn');
+  if (cancelPlanBtn) {
+    cancelPlanBtn.onclick = async () => {
+      if (!state.currentUser) return;
+      await window.hubDB.setSubscription(state.currentUser.id, 'free');
+      if (state.isApiConnected) {
+        apiRequest('/api/subscription/cancel', { method: 'POST' }).catch(() => {});
+      }
+      notify('Switched back to Free plan.', 'info');
+      await refreshSubscription();
+      await renderPlans();
+    };
+  }
+
+
+  // Topbar and Dropdown DM & Database navigation
+  const topbarDmBtn = document.getElementById('topbarDmBtn');
+  if (topbarDmBtn) topbarDmBtn.onclick = () => switchView('messages');
+
+  const topbarDbBtn = document.getElementById('topbarDbBtn');
+  if (topbarDbBtn) topbarDbBtn.onclick = () => switchView('database');
+
+  const menuDmBtn = document.getElementById('menuDmBtn');
+  if (menuDmBtn) {
+    menuDmBtn.onclick = () => {
+      document.getElementById('userDropdown')?.classList.add('hidden');
+      switchView('messages');
+    };
+  }
+
+  const menuDbBtn = document.getElementById('menuDbBtn');
+  if (menuDbBtn) {
+    menuDbBtn.onclick = () => {
+      document.getElementById('userDropdown')?.classList.add('hidden');
+      switchView('database');
+    };
+  }
+
+  // Player action buttons: Share, Lyrics, Sleep Timer
+  const playerShareBtn = document.getElementById('playerShareBtn');
+  if (playerShareBtn) playerShareBtn.onclick = () => openShareModal(state.currentTrack);
+
+  const lyricsBtn = document.getElementById('lyricsBtn');
+  if (lyricsBtn) lyricsBtn.onclick = openLyricsModal;
+
+  const sleepTimerBtn = document.getElementById('sleepTimerBtn');
+  if (sleepTimerBtn) sleepTimerBtn.onclick = openTimerModal;
+
+  // Modals close buttons
+  const closeShareBtn = document.getElementById('closeShareBtn');
+  if (closeShareBtn) closeShareBtn.onclick = closeShareModal;
+
+  const closeLyricsBtn = document.getElementById('closeLyricsBtn');
+  if (closeLyricsBtn) closeLyricsBtn.onclick = closeLyricsModal;
+
+  const closeTimerBtn = document.getElementById('closeTimerBtn');
+  if (closeTimerBtn) closeTimerBtn.onclick = closeTimerModal;
+
+  // Chat Form & Friend Search
+  const chatForm = document.getElementById('chatForm');
+  if (chatForm) chatForm.onsubmit = sendChatMessageFromInput;
+
+  const chatAttachSongBtn = document.getElementById('chatAttachSongBtn');
+  if (chatAttachSongBtn) chatAttachSongBtn.onclick = toggleChatAttachSong;
+
+  const chatSendCurrentBtn = document.getElementById('chatSendCurrentBtn');
+  if (chatSendCurrentBtn) chatSendCurrentBtn.onclick = toggleChatAttachSong;
+
+  const friendSearch = document.getElementById('friendSearchInput');
+  if (friendSearch) friendSearch.oninput = () => renderMessagesView();
+
+  // Sleep Timer presets & Cancel
+  document.querySelectorAll('.timer-opt-btn[data-minutes]').forEach(b => {
+    b.onclick = () => setSleepTimer(b.dataset.minutes);
+  });
+  const cancelTimerBtn = document.getElementById('cancelTimerBtn');
+  if (cancelTimerBtn) cancelTimerBtn.onclick = () => cancelSleepTimer(true);
+
+  // Database Hub actions
+  const dbRefreshBtn = document.getElementById('dbRefreshBtn');
+  if (dbRefreshBtn) {
+    dbRefreshBtn.onclick = async () => {
+      notify('Refreshing database diagnostics...', 'info');
+      await renderDatabaseHub();
+      notify('Database metrics up to date! 🟢', 'success');
+    };
+  }
+
+  const dbExportBtn = document.getElementById('dbExportBtn');
+  if (dbExportBtn) dbExportBtn.onclick = exportDatabaseBackup;
+
+  const dbClearCacheBtn = document.getElementById('dbClearCacheBtn');
+  if (dbClearCacheBtn) dbClearCacheBtn.onclick = clearDatabaseCacheAction;
+
   // Local audio upload
   initLocalUpload();
 }
@@ -1675,11 +2879,19 @@ function setupHandlers() {
 async function init() {
   try {
     await window.hubDB.init();
+    await checkApiConnection();
     setupHandlers();
     renderHomeGrid();
     setVolume(0.8);
 
-    const session = window.hubDB.getCurrentSession();
+    let session = window.hubDB.getCurrentSession();
+    if (state.isApiConnected) {
+      try {
+        const { user } = await apiRequest('/api/auth/me');
+        if (user) session = user;
+      } catch (_e) {}
+    }
+
     if (session && session.id && session.id !== 'usr_guest') {
       await loginSuccess(session, false);
     } else {

@@ -503,6 +503,235 @@ class Database {
       } catch (e) {}
     }
   }
+
+  async removePlaylist(userId, playlistId) {
+    if (!userId || !playlistId) return;
+    const pls = this._getLS('pls_' + userId, []);
+    const filtered = pls.filter(p => p.id !== playlistId);
+    this._setLS('pls_' + userId, filtered);
+
+    const db = await this.init();
+    if (db) {
+      try {
+        const tx = db.transaction('playlists', 'readwrite');
+        tx.objectStore('playlists').delete(playlistId);
+      } catch (e) {}
+    }
+  }
+
+  // ------------------ LISTENING HISTORY ------------------
+  async addHistory(userId, track) {
+    if (!userId || !track || !track.id) return;
+    const key = 'history_' + userId;
+    const history = this._getLS(key, []);
+    const filtered = history.filter(h => h.track?.id !== track.id);
+    filtered.unshift({ track, playedAt: new Date().toISOString() });
+    this._setLS(key, filtered.slice(0, 100));
+  }
+
+  async getHistory(userId) {
+    if (!userId) return [];
+    return this._getLS('history_' + userId, []);
+  }
+
+  // ------------------ MEMBERSHIP SUBSCRIPTION ------------------
+  async getSubscription(userId) {
+    if (!userId || userId === 'usr_guest') return { planId: 'free', status: 'active' };
+    return this._getLS('sub_' + userId, { planId: 'free', status: 'active' });
+  }
+
+  async setSubscription(userId, planId) {
+    if (!userId || userId === 'usr_guest') return { planId: 'free', status: 'active' };
+    const sub = {
+      planId: planId || 'free',
+      status: planId === 'free' ? 'active' : 'active',
+      startedAt: new Date().toISOString()
+    };
+    this._setLS('sub_' + userId, sub);
+    return sub;
+  }
+
+  // ------------------ USER SETTINGS ------------------
+  async saveSettings(userId, settings) {
+    if (!userId) return null;
+    this._setLS('settings_' + userId, settings);
+    const db = await this.init();
+    if (db) {
+      try {
+        const tx = db.transaction('settings', 'readwrite');
+        tx.objectStore('settings').put({ userId, settings });
+      } catch (e) {}
+    }
+    return settings;
+  }
+
+  async getSettings(userId) {
+    if (!userId) return null;
+    const db = await this.init();
+    if (db) {
+      try {
+        const res = await new Promise(resolve => {
+          const tx = db.transaction('settings', 'readonly');
+          const req = tx.objectStore('settings').get(userId);
+          req.onsuccess = () => resolve(req.result ? req.result.settings : null);
+          req.onerror = () => resolve(null);
+        });
+        if (res) return res;
+      } catch (e) {}
+    }
+    return this._getLS('settings_' + userId, null);
+  }
+
+  // ------------------ FRIENDS & DIRECT MESSAGING (INSTAGRAM STYLE) ------------------
+  getFriends() {
+    return [
+      { id: 'fr_1', name: 'Rahul Varma', handle: '@rahul_beats', avatar: '🎧', online: true, status: 'Vibing to Devara 🔥' },
+      { id: 'fr_2', name: 'Priya Sharma', handle: '@priya_melodies', avatar: '🎵', online: true, status: 'Studying with Lo-Fi ☕' },
+      { id: 'fr_3', name: 'Vikram Reddy', handle: '@vikram_r', avatar: '🎸', online: false, status: 'Gym workout session 💪' },
+      { id: 'fr_4', name: 'Sneha Rao', handle: '@sneha_music', avatar: '✨', online: true, status: 'Listening to Bollywood hits' },
+      { id: 'fr_5', name: 'Karthik Kumar', handle: '@karthik_k', avatar: '⚡', online: false, status: 'Offline' }
+    ];
+  }
+
+  async getMessages(userId, friendId) {
+    if (!userId || !friendId) return [];
+    const key = `chat_${userId}_${friendId}`;
+    const msgs = this._getLS(key, null);
+    if (msgs !== null) return msgs;
+
+    // Seeded initial messages
+    let initialMsgs = [];
+    if (friendId === 'fr_1') {
+      initialMsgs = [
+        {
+          id: 'm_1',
+          sender: 'friend',
+          text: 'Hey bro! Did you listen to Chuttamalle? Anirudh beat drop is unreal!',
+          track: {
+            id: 'tel_1',
+            title: 'Chuttamalle (From "Devara")',
+            artist: 'Anirudh Ravichander, Shilpa Rao',
+            album: 'Devara Part 1',
+            cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80',
+            audioSrc: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=summer-walk-111105.mp3'
+          },
+          time: 'Just now'
+        }
+      ];
+    } else if (friendId === 'fr_2') {
+      initialMsgs = [
+        {
+          id: 'm_2',
+          sender: 'friend',
+          text: 'Listen to this track when you have time, super chill vibes ☕',
+          track: {
+            id: 'chill_1',
+            title: 'Midnight Coffee Beats',
+            artist: 'Lofi Fruits, ChillHop',
+            album: 'Lo-Fi Chill Sessions',
+            cover: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=300&auto=format&fit=crop&q=80',
+            audioSrc: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=lofi-chill-medium-version-159456.mp3'
+          },
+          time: '10m ago'
+        }
+      ];
+    }
+    this._setLS(key, initialMsgs);
+    return initialMsgs;
+  }
+
+  async sendMessage(userId, friendId, text, track = null) {
+    if (!userId || !friendId) return null;
+    const key = `chat_${userId}_${friendId}`;
+    const msgs = await this.getMessages(userId, friendId);
+    const newMsg = {
+      id: 'm_' + Date.now(),
+      sender: 'user',
+      text: (text || '').trim(),
+      track: track ? { ...track } : null,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: Date.now()
+    };
+    msgs.push(newMsg);
+    this._setLS(key, msgs);
+    return newMsg;
+  }
+
+  // ------------------ DATABASE DIAGNOSTICS & MANAGEMENT ------------------
+  async getDatabaseDiagnostics(userId) {
+    const isGuest = !userId || userId === 'usr_guest';
+    const users = this._getLS('users', []);
+    const favs = isGuest ? [] : await this.getFavorites(userId);
+    const dls = isGuest ? [] : await this.getDownloads(userId);
+    const pls = isGuest ? [] : await this.getPlaylists(userId);
+    const history = isGuest ? [] : await this.getHistory(userId);
+    const sub = await this.getSubscription(userId);
+
+    let bytes = 0;
+    dls.forEach(d => bytes += (d.sizeBytes || 0));
+    const mbUsed = (bytes / (1024 * 1024)).toFixed(2);
+
+    return {
+      engine: this.isIndexedDBAvailable ? 'IndexedDB + LocalStorage' : 'LocalStorage',
+      isIndexedDBAvailable: this.isIndexedDBAvailable,
+      usersCount: Math.max(1, users.length + 1),
+      favoritesCount: favs.length,
+      downloadsCount: dls.length,
+      storageUsedMb: mbUsed,
+      playlistsCount: pls.length,
+      historyCount: history.length,
+      activePlan: sub?.planId || 'free',
+      currentUserId: userId || 'usr_guest'
+    };
+  }
+
+  async exportDatabaseBackup(userId) {
+    const data = {
+      exportedAt: new Date().toISOString(),
+      user: this.getCurrentSession(),
+      favorites: await this.getFavorites(userId),
+      playlists: await this.getPlaylists(userId),
+      history: await this.getHistory(userId),
+      subscription: await this.getSubscription(userId)
+    };
+    return JSON.stringify(data, null, 2);
+  }
+
+  async clearDatabaseCache(userId) {
+    if (!userId) return;
+    localStorage.removeItem('ash_history_' + userId);
+    localStorage.removeItem('ash_pls_' + userId);
+    localStorage.removeItem('ash_settings_' + userId);
+    return true;
+  }
+
+  // ------------------ ADMIN CUSTOM CATALOG TRACKS ------------------
+  getCustomTracks() {
+    return this._getLS('custom_catalog_tracks', []);
+  }
+
+  addCustomTrack(track) {
+    const tracks = this.getCustomTracks();
+    const existingIdx = tracks.findIndex(t => t.id === track.id);
+    if (existingIdx !== -1) {
+      tracks[existingIdx] = track;
+    } else {
+      tracks.unshift(track);
+    }
+    this._setLS('custom_catalog_tracks', tracks);
+    return track;
+  }
+
+  deleteCustomTrack(trackId) {
+    const tracks = this.getCustomTracks();
+    const filtered = tracks.filter(t => t.id !== trackId);
+    this._setLS('custom_catalog_tracks', filtered);
+    return true;
+  }
+
+  clearCustomTracks() {
+    this._setLS('custom_catalog_tracks', []);
+  }
 }
 
 // Global instance
